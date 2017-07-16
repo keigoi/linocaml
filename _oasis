@@ -1,0 +1,44 @@
+OASISFormat: 0.4
+Name:        linocaml
+Version:     0.1
+Homepage:    https://github.com/keigoi/linocaml
+Synopsis:    A library with some ppx
+Authors:     Keigo Imai
+License:     Apache
+Plugins:     META (0.4), DevFiles (0.4)
+
+Library linocaml
+  Path:       lib
+  BuildTools: ocamlbuild
+  Modules:
+    Lens, Linocaml
+  BuildDepends:
+
+Library ppx
+  Path: ppx
+  BuildTools: ocamlbuild
+  Modules: Ppx_linocaml
+  FindlibName: ppx
+  FindlibParent: linocaml
+  XMETAType: syntax
+  XMETARequires: linocaml, ppx_deriving
+  XMETAExtraLines: ppx = "ppx_linocaml"
+  BuildDepends: compiler-libs, ppx_tools.metaquot, ppx_deriving.api
+
+Library ppx_lens
+  Path: ppx
+  BuildTools: ocamlbuild
+  Modules: Ppx_lens
+  FindlibName: ppx_lens
+  FindlibParent: linocaml
+  XMETAType: syntax
+  XMETARequires: ppx_deriving, linocaml
+  XMetaExtraLines: ppxopt = "ppx_deriving,./ppx_lens.cma"
+  BuildDepends: compiler-libs, ppx_deriving
+
+Executable ppx_linocaml
+  Path: ppx
+  BuildTools: ocamlbuild
+  MainIs: ppx_linocaml_ex.ml
+  BuildDepends: compiler-libs.common, ppx_tools.metaquot, ppx_deriving.api
+  CompiledObject: best

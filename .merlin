@@ -1,0 +1,13 @@
+B +threads
+PKG threads unix compiler-libs.common ppx_tools ppx_tools.metaquot ppx_deriving oUnit
+
+S lib
+S ppx
+S test
+
+B _build/lib
+B _build/ppx
+B _build/test
+
+# B ~/.opam/4.03.0/build/ounit.2.0.0/_build/src
+# S ~/.opam/4.03.0/build/ounit.2.0.0/_build/src

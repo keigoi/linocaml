@@ -1,0 +1,34 @@
+# OASIS_START
+# DO NOT EDIT (digest: 08327d11af4da2f21216708ba83fe96f)
+version = "0.1"
+description = "A library with some ppx"
+archive(byte) = "linocaml.cma"
+archive(byte, plugin) = "linocaml.cma"
+archive(native) = "linocaml.cmxa"
+archive(native, plugin) = "linocaml.cmxs"
+exists_if = "linocaml.cma"
+package "ppx_lens" (
+ version = "0.1"
+ description = "A library with some ppx"
+ requires = "ppx_deriving linocaml"
+ archive(syntax, preprocessor) = "ppx_lens.cma"
+ archive(syntax, toploop) = "ppx_lens.cma"
+ archive(syntax, preprocessor, native) = "ppx_lens.cmxa"
+ archive(syntax, preprocessor, native, plugin) = "ppx_lens.cmxs"
+ ppxopt = "ppx_deriving,./ppx_lens.cma"
+ exists_if = "ppx_lens.cma"
+)
+
+package "ppx" (
+ version = "0.1"
+ description = "A library with some ppx"
+ requires = "linocaml ppx_deriving"
+ archive(syntax, preprocessor) = "ppx.cma"
+ archive(syntax, toploop) = "ppx.cma"
+ archive(syntax, preprocessor, native) = "ppx.cmxa"
+ archive(syntax, preprocessor, native, plugin) = "ppx.cmxs"
+ ppx = "ppx_linocaml"
+ exists_if = "ppx.cma"
+)
+# OASIS_STOP
+
