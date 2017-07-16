@@ -33,6 +33,9 @@ let emptyslot () =
 let runmonad () =
   longident (!root_module ^ ".Internal.__run")
   
+let matchout () =
+  longident (!root_module ^ ".Internal.__match_out")
+  
 let error loc (s:string) =
   Location.raise_errorf ~loc "%s" s
   
@@ -77,18 +80,21 @@ let slot_bind bindings expr =
   | `lab1(p11',..,p1N') -> e_1'
   | ..
   | `labN(pM1',..,pMN') -> e_M'
-  where, pXY' = fresh_pat() if pXY == #slotname, and we insert '(set e_slot new_pat) >>' before e_X
+  where, pXY' = fresh_pat() if pXY == #slotname, and we insert '(__set slotname new_pat) >>' before e_X
          pXY' = (Val pXY)   otherwise
 *)
-let linocaml_branch_clauses e_slot cases =
+let linocaml_branch_clauses cases =
+  let wraplinpat ~ppat_loc pat =
+    pconstr ~loc:ppat_loc "Linocaml.Lin__" [pat]
+  in
   let convpat = function
     | {ppat_desc=Ppat_type(name);ppat_loc;ppat_attributes} ->
        let var = newname "match" in
-       let linvar = pconstr ~loc:ppat_loc "Linocaml.Lin" [pvar var] in
+       let linvar = wraplinpat ~ppat_loc (pvar var) in
        let insert_exp = [%expr [%e setfunc ()] [%e Exp.ident name] [%e longident var]] in
        linvar, [insert_exp]
     | pat ->
-       let valpat = [%pat? Linocaml.Data [%p pat]] in
+       let valpat = [%pat? Linocaml.Data__ [%p pat]] in
        valpat, []
   in
   (* let add_unset orig = [%expr [%e monad_bind ()] ([%e unsetfunc ()] [%e e_slot]) (fun () -> [%e orig])] in *)
@@ -106,15 +112,19 @@ let linocaml_branch_clauses e_slot cases =
        | None -> None, []
   in
   let convcase = function
-    | {pc_lhs={ppat_desc=Ppat_construct(name,pat)} as lhs_orig;pc_guard;pc_rhs=rhs_orig} ->
+    | {pc_lhs={ppat_desc=Ppat_construct(name,pat);ppat_loc} as lhs_orig;pc_guard;pc_rhs=rhs_orig} ->
        let pat, inserts = convpat2 pat in
+       let lhs_new = {lhs_orig with ppat_desc=Ppat_construct(name,pat)} in
+       let lhs_new = wraplinpat ~ppat_loc lhs_new in
        let rhs_new = insert_bind rhs_orig inserts in
-       {pc_lhs={lhs_orig with ppat_desc=Ppat_construct(name,pat)};pc_guard;pc_rhs=rhs_new}
+       {pc_lhs=lhs_new;pc_guard;pc_rhs=rhs_new}
        
-    | {pc_lhs={ppat_desc=Ppat_variant(labl,pat)} as lhs_orig;pc_guard;pc_rhs=rhs_orig} ->
+    | {pc_lhs={ppat_desc=Ppat_variant(labl,pat);ppat_loc} as lhs_orig;pc_guard;pc_rhs=rhs_orig} ->
        let pat, inserts = convpat2 pat in
+       let lhs_new = {lhs_orig with ppat_desc=Ppat_variant(labl,pat)} in
+       let lhs_new = wraplinpat ~ppat_loc lhs_new in
        let rhs_new = insert_bind rhs_orig inserts in
-       {pc_lhs={lhs_orig with ppat_desc=Ppat_variant(labl,pat)};pc_guard;pc_rhs=rhs_new}
+       {pc_lhs=lhs_new;pc_guard;pc_rhs=rhs_new}
        
     | {pc_lhs={ppat_loc=loc}} -> error loc "Invalid pattern--"
   in
@@ -154,10 +164,9 @@ let expression_mapper id mapper exp attrs =
   | "slot", _ -> error pexp_loc "Invalid content for extension %lin"
 
   (* pattern match on linear part *)
-  | "lin", Pexp_match(e_slot, cases) ->
-     let open Typ in
-     let cases = linocaml_branch_clauses e_slot cases in
-     let branch_exp = [%expr [%e getfunc ()] [%e e_slot]] in
+  | "lin", Pexp_match(e, cases) ->
+     let cases = linocaml_branch_clauses cases in
+     let branch_exp = [%expr [%e matchout ()] [%e e]] in
      let new_exp = Pexp_apply(monad_bind (),[(Nolabel,branch_exp); (Nolabel,Exp.function_ cases)])
      in
      Some (mapper.Ast_mapper.expr mapper {pexp_desc=new_exp; pexp_loc; pexp_attributes})
