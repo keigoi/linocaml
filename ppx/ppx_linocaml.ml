@@ -95,26 +95,28 @@ let linocaml_branch_clauses e_slot cases =
   let insert_bind orig inserts =
     List.fold_right (fun exp expr -> [%expr [%e monad_bind ()] [%e exp] (fun () -> [%e expr])]) inserts orig
   in
-  let convcase = function
-    | {pc_lhs={ppat_desc=Ppat_variant(labl,pat);ppat_loc;ppat_attributes} as lhs_orig;pc_guard;pc_rhs=rhs_orig} ->
-       begin match pat with
+  let convpat2 = function
        | Some {ppat_desc=Ppat_tuple(pats);ppat_loc=loc_in;ppat_attributes=attr_in} ->
           let pat_new,inserts = List.split (List.map convpat pats) in
-          let pat_new = {ppat_desc=Ppat_variant(labl,Some({ppat_desc=Ppat_tuple(pat_new);ppat_loc=loc_in;ppat_attributes=attr_in}));ppat_loc;ppat_attributes} in
-          let inserts = List.concat inserts in
-          let rhs_new = insert_bind rhs_orig inserts in
-          {pc_lhs=pat_new;
-           pc_guard;
-           pc_rhs=rhs_new}
-       | Some(pat) ->
+          let pat_new = {ppat_desc=Ppat_tuple(pat_new);ppat_loc=loc_in;ppat_attributes=attr_in} in
+          Some pat_new, List.concat inserts
+       | Some pat ->
           let pat_new,inserts = convpat pat in
-          let pat_new = {ppat_desc=Ppat_variant(labl,Some(pat_new));ppat_loc;ppat_attributes} in
-          let rhs_new = insert_bind rhs_orig inserts in
-          {pc_lhs=pat_new;pc_guard;pc_rhs=rhs_new}
-       | None ->
-          {pc_lhs=lhs_orig;pc_guard;pc_rhs=rhs_orig}
-       end
-    | {pc_lhs={ppat_loc=loc}} -> error loc "Invalid pattern"
+          Some pat_new, inserts
+       | None -> None, []
+  in
+  let convcase = function
+    | {pc_lhs={ppat_desc=Ppat_construct(name,pat)} as lhs_orig;pc_guard;pc_rhs=rhs_orig} ->
+       let pat, inserts = convpat2 pat in
+       let rhs_new = insert_bind rhs_orig inserts in
+       {pc_lhs={lhs_orig with ppat_desc=Ppat_construct(name,pat)};pc_guard;pc_rhs=rhs_new}
+       
+    | {pc_lhs={ppat_desc=Ppat_variant(labl,pat)} as lhs_orig;pc_guard;pc_rhs=rhs_orig} ->
+       let pat, inserts = convpat2 pat in
+       let rhs_new = insert_bind rhs_orig inserts in
+       {pc_lhs={lhs_orig with ppat_desc=Ppat_variant(labl,pat)};pc_guard;pc_rhs=rhs_new}
+       
+    | {pc_lhs={ppat_loc=loc}} -> error loc "Invalid pattern--"
   in
   List.map convcase cases
 
@@ -170,7 +172,6 @@ let rebind_module modexpr =
   
 let runner ({ ptype_loc = loc } as type_decl) =
   match type_decl with
-  (* | {ptype_kind = Ptype_record labels} -> *)
   | {ptype_name = {txt = name}; ptype_manifest = Some ({ptyp_desc = Ptyp_object (labels, Closed)})} ->
     let obj =
       let meth (fname,_,_) =
