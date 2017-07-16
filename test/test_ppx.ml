@@ -24,7 +24,7 @@ let t = s
             
 let f () =
   let open LinList in
-  let ls : int plist = Lin(`Cons(Data 1,Lin(`Cons(Data 2,Lin(`Cons(Data 3,Lin `Nil)))))) in
+  let ls = `Cons(Data 1,Lin(`Cons(Data 2,Lin(`Cons(Data 3,Lin `Nil))))) in
   let%slot #s = make ls in
   iter s s (fun x -> print_endline (!% "%d;" x); return ()) >>
   return ()

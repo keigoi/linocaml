@@ -12,11 +12,11 @@ val (>>=) : ('pre,'mid,'a) monad -> ('a -> ('mid,'post,'b) monad) -> ('pre,'post
 
 module Syntax : sig
   val bind : ('pre,'mid,'a) monad -> ('a -> ('mid,'post,'b) monad) -> ('pre,'post,'b) monad
-  val set : (empty,'a,'pre,'post) slot -> 'a -> ('pre,'post,unit) monad
+  val set : (empty,'a lin,'pre,'post) slot -> 'a -> ('pre,'post,unit) monad
 
   module Internal : sig
     val __unset : ('a,empty,'pre,'post) slot -> ('pre,'post,unit) monad
-    val __get : ('a,empty,'pre,'post) slot -> ('pre,'post,'a) monad
+    val __get : ('a lin,empty,'pre,'post) slot -> ('pre,'post,'a) monad
     val __empty : empty
     val __run : ('pre,'post,'a) monad -> 'pre -> 'a
   end

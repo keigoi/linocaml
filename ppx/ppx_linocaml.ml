@@ -85,7 +85,7 @@ let linocaml_branch_clauses e_slot cases =
     | {ppat_desc=Ppat_type(name);ppat_loc;ppat_attributes} ->
        let var = newname "match" in
        let linvar = pconstr ~loc:ppat_loc "Linocaml.Lin" [pvar var] in
-       let insert_exp = [%expr [%e setfunc ()] [%e Exp.ident name] (Linocaml.Lin [%e longident var])] in
+       let insert_exp = [%expr [%e setfunc ()] [%e Exp.ident name] [%e longident var]] in
        linvar, [insert_exp]
     | pat ->
        let valpat = [%pat? Linocaml.Data [%p pat]] in
@@ -101,7 +101,6 @@ let linocaml_branch_clauses e_slot cases =
        | Some {ppat_desc=Ppat_tuple(pats);ppat_loc=loc_in;ppat_attributes=attr_in} ->
           let pat_new,inserts = List.split (List.map convpat pats) in
           let pat_new = {ppat_desc=Ppat_variant(labl,Some({ppat_desc=Ppat_tuple(pat_new);ppat_loc=loc_in;ppat_attributes=attr_in}));ppat_loc;ppat_attributes} in
-          let pat_new = pconstr ~loc:loc_in "Linocaml.Lin" [pat_new] in
           let inserts = List.concat inserts in
           let rhs_new = insert_bind rhs_orig inserts in
           {pc_lhs=pat_new;
@@ -110,12 +109,10 @@ let linocaml_branch_clauses e_slot cases =
        | Some(pat) ->
           let pat_new,inserts = convpat pat in
           let pat_new = {ppat_desc=Ppat_variant(labl,Some(pat_new));ppat_loc;ppat_attributes} in
-          let pat_new = pconstr ~loc:ppat_loc "Linocaml.Lin" [pat_new] in
           let rhs_new = insert_bind rhs_orig inserts in
           {pc_lhs=pat_new;pc_guard;pc_rhs=rhs_new}
        | None ->
-          let pat_new = pconstr ~loc:ppat_loc "Linocaml.Lin" [lhs_orig] in
-          {pc_lhs=pat_new;pc_guard;pc_rhs=rhs_orig}
+          {pc_lhs=lhs_orig;pc_guard;pc_rhs=rhs_orig}
        end
     | {pc_lhs={ppat_loc=loc}} -> error loc "Invalid pattern"
   in

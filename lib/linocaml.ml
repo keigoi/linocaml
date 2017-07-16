@@ -14,11 +14,11 @@ let (>>) m n = m >>= (fun () -> n)
 module Syntax = struct
   open Lens
   let bind = (>>=)
-  let set {set} b pre = set pre b, ()
+  let set {set} b pre = set pre (Lin b), ()
 
   module Internal = struct
     let __unset {set} pre = set pre Empty, ()
-    let __get {get;set} pre = set pre Empty, get pre
+    let __get {get;set} pre = set pre Empty, match get pre with Lin a -> a
     let __empty = Empty
     let __run m pre = snd (m pre)
   end
