@@ -11,8 +11,10 @@ val bind : ('pre,'mid,'a) monad -> ('a -> ('mid,'post,'b) monad) -> ('pre,'post,
 val (>>) : ('pre,'mid,unit) monad -> ('mid,'post,'b) monad -> ('pre,'post,'b) monad
 val (>>=) : ('pre,'mid,'a) monad -> ('a -> ('mid,'post,'b) monad) -> ('pre,'post,'b) monad
 
-val get : ('a lin,empty,'pre,'post) slot -> ('pre,'post,'a) lin_match
+val get : ('a lin,empty,'pre,'post) slot -> ('pre,'post,'a lin) lin_match
 val set : (empty,'a lin,'pre,'post) slot -> 'a -> ('pre,'post,unit) monad
+val lin : (unit -> 'a) -> ('p,'p,'a lin) lin_match
+val lin_ : 'a -> ('p,'p,'a lin) lin_match
 
 module Syntax : sig
   val bind : ('pre,'mid,'a) monad -> ('a -> ('mid,'post,'b) monad) -> ('pre,'post,'b) monad
@@ -23,7 +25,7 @@ module Syntax : sig
     val __get : ('a lin,empty,'pre,'post) slot -> ('pre,'post,'a) monad
     val __empty : empty
     val __run : ('pre,'post,'a) monad -> 'pre -> 'a
-    val __match_out : ('pre,'post,'a) lin_match -> ('pre,'post,'a lin) monad
+    val __match_out : ('pre,'post,'a lin) lin_match -> ('pre,'post,'a lin) monad
   end
 end
      
@@ -32,9 +34,9 @@ module Internal : sig
   val __get : ('a lin,empty,'pre,'post) slot -> ('pre,'post,'a) monad
   val __empty : empty
   val __run : ('pre,'post,'a) monad -> 'pre -> 'a
-  val __match_out : ('pre,'post,'a) lin_match -> ('pre,'post,'a lin) monad
+  val __match_out : ('pre,'post,'a lin) lin_match -> ('pre,'post,'a lin) monad
     
   val __monad : ('pre -> 'post * 'a) -> ('pre,'post,'a) monad
-  val __match_in : ('pre,'post,'a lin) monad -> ('pre,'post,'a) lin_match
-  val __match_in2 : ('pre -> 'post * 'a lin) -> ('pre,'post,'a) lin_match
+  val __match_in : ('pre,'post,'a lin) monad -> ('pre,'post,'a lin) lin_match
+  val __match_in2 : ('pre -> 'post * 'a lin) -> ('pre,'post,'a lin) lin_match
 end

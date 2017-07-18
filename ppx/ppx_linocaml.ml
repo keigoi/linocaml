@@ -38,7 +38,57 @@ let matchout () =
   
 let error loc (s:string) =
   Location.raise_errorf ~loc "%s" s
-  
+
+let rec traverse f(*var wrapper*) g(*#tconst wrapper*) ({ppat_desc;ppat_loc;ppat_attributes} as patouter) =
+  match ppat_desc with
+  | Ppat_any -> f patouter
+        (* _ *)
+  | Ppat_var _ -> f patouter
+        (* x *)
+  | Ppat_alias (pat,tvarloc) -> {patouter with ppat_desc=Ppat_alias(traverse f g pat,tvarloc)}
+        (* P as 'a *)
+  | Ppat_constant _ -> patouter
+        (* 1, 'a', "true", 1.0, 1l, 1L, 1n *)
+  | Ppat_interval (_,_) -> patouter
+        (* 'a'..'z'
+
+           Other forms of interval are recognized by the parser
+           but rejected by the type-checker. *)
+  | Ppat_tuple pats -> {patouter with ppat_desc=Ppat_tuple(List.map (traverse f g) pats)}
+        (* (P1, ..., Pn)
+
+           Invariant: n >= 2
+        *)
+  | Ppat_construct (lidloc,Some(pat)) -> {patouter with ppat_desc=Ppat_construct(lidloc,Some(traverse f g pat))}
+  | Ppat_construct (_,None) -> patouter
+        (* C                None
+           C P              Some P
+           C (P1, ..., Pn)  Some (Ppat_tuple [P1; ...; Pn])
+         *)
+  | Ppat_variant (lab,Some(pat)) -> {patouter with ppat_desc=Ppat_variant(lab,Some(traverse f g pat))}
+  | Ppat_variant (lab,None) -> patouter
+        (* `A             (None)
+           `A P           (Some P)
+         *)
+  | Ppat_record (recpats, Closed) -> {patouter with ppat_desc=Ppat_record(List.map (fun (r,p) -> (r,traverse f g p)) recpats, Closed)}
+        (* { l1=P1; ...; ln=Pn }     (flag = Closed)
+           { l1=P1; ...; ln=Pn; _}   (flag = Open)
+
+           Invariant: n > 0
+         *)
+  | Ppat_array pats -> {patouter with ppat_desc=Ppat_array (List.map (traverse f g) pats)}
+        (* [| P1; ...; Pn |] *)
+  | Ppat_constraint (pat,typ)  -> {patouter with ppat_desc=Ppat_constraint(traverse f g pat,typ)}
+        (* (P : T) *)
+  | Ppat_type lidloc -> g lidloc
+        (* #tconst *)
+  | Ppat_lazy pat -> {patouter with ppat_desc=Ppat_lazy(traverse f g pat)}
+                   
+  | Ppat_record (_, Open)
+  | Ppat_or (_,_) | Ppat_unpack _
+  | Ppat_exception _ | Ppat_extension _ ->
+       failwith (* ~loc:ppat_loc *) "%lin cannot handle this pattern"
+
 (* [?? = e0] and [?? = e1] and .. ==> [dum$0 = e0] and [dum$1 = e1] and ..
    (to use with bindbody_of_let.) *)
 let bindings_of_let bindings =
@@ -59,89 +109,54 @@ let bindbody_of_let exploc bindings exp =
   in
   make 0 bindings
 
-(* [{lab1} = e1] and [{lab2} = e2 and .. and e ==> e1 ~bindto:lab1 >>= (fun () -> e2 ~bindto:lab2 ..)  *)
-(* [#lab1 = e1] and [#lab2 = e2 and .. and e ==> e1 ~bindto:lab1 >>= (fun () -> e2 ~bindto:lab2 ..)  *)
-let slot_bind bindings expr =
-  let f binding expr =
-    match binding with
-    | {pvb_pat = {ppat_desc = Ppat_record ([({txt},_)],Closed)}; pvb_expr = rhs}
-    | {pvb_pat = {ppat_desc = Ppat_type {txt}}; pvb_expr = rhs} ->
-      let lensname = String.concat "." (Longident.flatten txt) in
-      let f = Exp.fun_ Label.nolabel None (punit ()) expr in
-      [%expr [%e monad_bind ()] ([%e rhs] ~bindto:[%e evar lensname]) [%e f]]
-    | _ -> raise Not_found
-  in List.fold_right f bindings expr
+let rec is_linpat {ppat_desc} = 
+  match ppat_desc with
+  | Ppat_type _ -> true
+  | Ppat_alias (pat,_) -> is_linpat pat
+  | Ppat_constraint (pat,_)  -> is_linpat pat
+  | Ppat_any | Ppat_var _ 
+  | Ppat_constant _ | Ppat_interval (_,_)
+  | Ppat_tuple _ | Ppat_construct (_,_)
+  | Ppat_variant (_,_) | Ppat_record (_, _)
+  | Ppat_array _ | Ppat_lazy _ -> false
+  | Ppat_or (_,_) | Ppat_unpack _
+  | Ppat_exception _ | Ppat_extension _ ->
+       failwith (* ~loc:ppat_loc *) "%lin cannot handle this pattern"
   
-(* Converts match clauses to handle branching.
-  | `lab1(p11,..,p1N) -> e_1
-  | ..
-  | `labM(pM1,..,pMN) -> e_M
-  ==>
-  | `lab1(p11',..,p1N') -> e_1'
-  | ..
-  | `labN(pM1',..,pMN') -> e_M'
-  where, pXY' = fresh_pat() if pXY == #slotname, and we insert '(__set slotname new_pat) >>' before e_X
-         pXY' = (Val pXY)   otherwise
-*)
-let linocaml_branch_clauses cases =
-  let wraplinpat ~ppat_loc pat =
-    pconstr ~loc:ppat_loc "Linocaml.Lin__" [pat]
+let lin_pattern oldpat =
+  let wrap ({ppat_loc} as oldpat) =
+    let lin_vars = ref []
+    in
+    let wrap_linpat ({loc} as linvar) =
+      let newvar = newname "match" in
+      lin_vars := (linvar,newvar) :: !lin_vars;
+      pconstr ~loc "Linocaml.Lin__" [pvar ~loc newvar]
+      
+    and wrap_datapat ({ppat_loc} as pat) =
+      pconstr ~loc:ppat_loc "Linocaml.Data__" [pat]
+    in
+    let newpat = traverse wrap_datapat wrap_linpat oldpat in
+    let newpat =
+      if is_linpat oldpat then
+        newpat (* not to duplicate Lin__ pattern *)
+      else
+        pconstr ~loc:ppat_loc "Linocaml.Lin__" [newpat]
+    in
+    newpat, List.rev !lin_vars
   in
-  let convpat = function
-    | {ppat_desc=Ppat_type(name);ppat_loc;ppat_attributes} ->
-       let var = newname "match" in
-       let linvar = wraplinpat ~ppat_loc (pvar var) in
-       let insert_exp = [%expr [%e setfunc ()] [%e Exp.ident name] [%e longident var]] in
-       linvar, [insert_exp]
-    | pat ->
-       let valpat = [%pat? Linocaml.Data__ [%p pat]] in
-       valpat, []
+  let insert_expr (linvar, newvar) = app (setfunc ()) [Exp.ident linvar; evar newvar]
   in
-  (* let add_unset orig = [%expr [%e monad_bind ()] ([%e unsetfunc ()] [%e e_slot]) (fun () -> [%e orig])] in *)
-  let insert_bind orig inserts =
-    List.fold_right (fun exp expr -> [%expr [%e monad_bind ()] [%e exp] (fun () -> [%e expr])]) inserts orig
-  in
-  let convpat2 = function
-       | Some {ppat_desc=Ppat_tuple(pats);ppat_loc=loc_in;ppat_attributes=attr_in} ->
-          let pat_new,inserts = List.split (List.map convpat pats) in
-          let pat_new = {ppat_desc=Ppat_tuple(pat_new);ppat_loc=loc_in;ppat_attributes=attr_in} in
-          Some pat_new, List.concat inserts
-       | Some pat ->
-          let pat_new,inserts = convpat pat in
-          Some pat_new, inserts
-       | None -> None, []
-  in
-  let convcase = function
-    | {pc_lhs={ppat_desc=Ppat_construct(name,pat);ppat_loc} as lhs_orig;pc_guard;pc_rhs=rhs_orig} ->
-       let pat, inserts = convpat2 pat in
-       let lhs_new = {lhs_orig with ppat_desc=Ppat_construct(name,pat)} in
-       let lhs_new = wraplinpat ~ppat_loc lhs_new in
-       let rhs_new = insert_bind rhs_orig inserts in
-       {pc_lhs=lhs_new;pc_guard;pc_rhs=rhs_new}
-       
-    | {pc_lhs={ppat_desc=Ppat_variant(labl,pat);ppat_loc} as lhs_orig;pc_guard;pc_rhs=rhs_orig} ->
-       let pat, inserts = convpat2 pat in
-       let lhs_new = {lhs_orig with ppat_desc=Ppat_variant(labl,pat)} in
-       let lhs_new = wraplinpat ~ppat_loc lhs_new in
-       let rhs_new = insert_bind rhs_orig inserts in
-       {pc_lhs=lhs_new;pc_guard;pc_rhs=rhs_new}
-       
-    | {pc_lhs={ppat_loc=loc}} -> error loc "Invalid pattern--"
-  in
-  List.map convcase cases
+  let newpat,lin_vars = wrap oldpat in
+  newpat, List.map insert_expr lin_vars
 
-(* let branch_func_name funname = longident (!root_module ^ ".LinocamlN.__"^funname) *)
-
-(* let make_branch_func_types labls = *)
-(*   let open Typ in *)
-(*   let rows = *)
-(*     List.mapi (fun i labl -> Rtag(labl,[],false,[var (freshname ())])) labls *)
-(*   in *)
-(*   [%type: [%t (variant rows Closed None)] * [%t var (freshname ())] -> [%t var (freshname ())] ] *)
+let add_setslots es expr =
+  List.fold_right (fun e expr -> app (monad_bind ()) [e; lam (punit ()) expr]) es expr
 
 let expression_mapper id mapper exp attrs =
   let pexp_attributes = exp.pexp_attributes @ attrs in
   let pexp_loc=exp.pexp_loc in
+  let process_inner expr = mapper.Ast_mapper.expr mapper expr
+  in
   match id, exp.pexp_desc with
 
   (* monadic bind *)
@@ -153,24 +168,40 @@ let expression_mapper id mapper exp attrs =
           (bindings_of_let vbl)
           (bindbody_of_let exp.pexp_loc vbl expression)
       in
-      Some (mapper.Ast_mapper.expr mapper { new_exp with pexp_loc; pexp_attributes })
-  | "w", _ -> error pexp_loc "Invalid content for extension %s|%w"
+      Some (process_inner { new_exp with pexp_loc; pexp_attributes })
+  | "w", _ -> error pexp_loc "Invalid content for extension %w; it must be used as let%w"
 
   (* slot bind *)
   (* let%lin {lab} = e1 in e2 ==> Linocaml.Syntax.bind (e1 ~bindto:lab) (fun () -> e2) *)
-  | "slot", Pexp_let (Nonrecursive, vbl, expression) ->
-      let new_exp = slot_bind vbl expression in
-      Some (mapper.Ast_mapper.expr mapper { new_exp with pexp_loc; pexp_attributes })
-  | "slot", _ -> error pexp_loc "Invalid content for extension %lin"
+  | "lin", Pexp_let (Nonrecursive, vbls, expr) ->
+     let lin_binding ({pvb_pat;pvb_expr} as vb) =
+         let newpat, inserts = lin_pattern pvb_pat in
+         let new_expr = app (matchout ()) [pvb_expr] in
+         {vb with pvb_pat=newpat;pvb_expr=new_expr}, inserts
+     in
+     let new_vbls, inserts = List.split (List.map lin_binding vbls) in
+     let new_expr = add_setslots (List.concat inserts) expr in
+     let make_bind {pvb_pat;pvb_expr;pvb_loc;pvb_attributes} expr =
+       app ~loc:pexp_loc (monad_bind ()) [pvb_expr; lam ~loc:pvb_loc pvb_pat expr]
+     in
+     let expression = List.fold_right make_bind new_vbls new_expr
+     in
+     Some (process_inner expression)
 
   (* pattern match on linear part *)
-  | "lin", Pexp_match(e, cases) ->
-     let cases = linocaml_branch_clauses cases in
-     let branch_exp = [%expr [%e matchout ()] [%e e]] in
-     let new_exp = Pexp_apply(monad_bind (),[(Nolabel,branch_exp); (Nolabel,Exp.function_ cases)])
+  | "lin", Pexp_match(matched, cases) ->
+     let lin_match ({pc_lhs=pat;pc_rhs=expr} as case) =
+       let newpat, inserts = lin_pattern pat in
+       let newexpr = add_setslots inserts expr in
+       {case with pc_lhs=newpat;pc_rhs=newexpr}
      in
-     Some (mapper.Ast_mapper.expr mapper {pexp_desc=new_exp; pexp_loc; pexp_attributes})
-  | "lin", _ -> error pexp_loc "Invalid content for extension %lin; it must be match%lin slotname with .."
+     let cases = List.map lin_match cases in
+     let new_matched = app (matchout ()) [matched] in
+     let new_exp = Pexp_apply(monad_bind (),[(Nolabel,new_matched); (Nolabel,Exp.function_ cases)])
+     in
+     Some (process_inner {pexp_desc=new_exp; pexp_loc; pexp_attributes})
+
+  | "lin", _ -> error pexp_loc "Invalid content for extension %lin; it must be \"let%lin slotname = ..\" OR \"match%lin slotname with ..\""
 
   | _ -> None
 
