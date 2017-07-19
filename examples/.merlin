@@ -1,0 +1,11 @@
+B +threads
+PKG threads unix compiler-libs.common ppx_tools ppx_tools.metaquot ppx_deriving linocaml linocaml.ppx linocaml.ppx_lens oUnit
+FLG -short-paths
+
+S .
+S ../lib
+
+B .
+
+# B ~/.opam/4.03.0/build/ounit.2.0.0/_build/src
+# S ~/.opam/4.03.0/build/ounit.2.0.0/_build/src

@@ -29,6 +29,7 @@ module Internal = struct
 end
 
 module Syntax = struct
+  let return = return
   let bind = (>>=)
   let set = set
 
@@ -37,6 +38,7 @@ module Syntax = struct
     let __get = Internal.__get
     let __empty = Internal.__empty
     let __run = Internal.__run
+    let __match_in = Internal.__match_in
     let __match_out = Internal.__match_out
   end
 end

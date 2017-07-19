@@ -1,3 +1,5 @@
+(* TODO: replace "failwith" with proper error-handling *)
+
 open Ast_helper
 open Asttypes
 open Parsetree
@@ -13,10 +15,13 @@ let newname =
   
 let root_module = ref "Linocaml.Syntax"
 
-let longident str = Exp.ident (lid str)
+let longident ?loc str = Exp.ident (lid ?loc str)
 
 let monad_bind () =
   longident (!root_module ^ ".bind")
+
+let monad_return () =
+  longident (!root_module ^ ".return")
   
 let setfunc () =
   longident (!root_module ^ ".set")
@@ -36,6 +41,9 @@ let runmonad () =
 let matchout () =
   longident (!root_module ^ ".Internal.__match_out")
   
+let matchin () =
+  longident (!root_module ^ ".Internal.__match_in")
+  
 let error loc (s:string) =
   Location.raise_errorf ~loc "%s" s
 
@@ -45,7 +53,9 @@ let rec traverse f(*var wrapper*) g(*#tconst wrapper*) ({ppat_desc;ppat_loc;ppat
         (* _ *)
   | Ppat_var _ -> f patouter
         (* x *)
-  | Ppat_alias (pat,tvarloc) -> {patouter with ppat_desc=Ppat_alias(traverse f g pat,tvarloc)}
+  | Ppat_alias (pat,tvarloc) ->
+     failwith "as-pattern is forbidden at %lin match" (* TODO relax this *)
+     (* {patouter with ppat_desc=Ppat_alias(traverse f g pat,tvarloc)} *)
         (* P as 'a *)
   | Ppat_constant _ -> patouter
         (* 1, 'a', "true", 1.0, 1l, 1L, 1n *)
@@ -152,6 +162,87 @@ let lin_pattern oldpat =
 let add_setslots es expr =
   List.fold_right (fun e expr -> app (monad_bind ()) [e; lam (punit ()) expr]) es expr
 
+let add_getslots es expr =
+  List.fold_right (fun (v,e) expr ->
+      app (monad_bind ()) [app (getfunc ()) [e]; lam (pvar v) expr]) es expr
+
+let rec linval ({pexp_desc;pexp_loc;pexp_attributes} as outer) =
+  match pexp_desc with
+  | Pexp_ident _ | Pexp_constant _ 
+  | Pexp_construct (_,None) 
+  | Pexp_variant (_,None) ->
+     outer, []
+    
+  | Pexp_apply ({pexp_desc=Pexp_ident {txt=Lident"!!"}} , [(Nolabel,exp)]) ->
+     let newvar = newname "linval" in
+     constr ~loc:pexp_loc "Linocaml.Lin__" [longident ~loc:pexp_loc newvar], [(newvar,exp)]
+     
+  | Pexp_tuple (exprs) ->
+    let exprs, bindings = List.split (List.map linval exprs) in
+    {pexp_desc=Pexp_tuple(exprs);pexp_loc;pexp_attributes}, List.concat bindings
+       
+  | Pexp_construct (lid,Some(expr)) ->
+     let expr, binding = linval expr in
+     {pexp_desc=Pexp_construct(lid,Some(expr));pexp_loc;pexp_attributes}, binding
+  | Pexp_variant (lab,Some(expr)) ->
+     let expr, binding = linval expr in
+     {pexp_desc=Pexp_variant(lab,Some(expr));pexp_loc;pexp_attributes}, binding
+  | Pexp_record (fields,expropt) ->
+     let fields, bindings =
+       List.split (List.map (fun (lid,expr) -> let e,b = linval expr in (lid,e),b) fields)
+     in
+     let bindings = List.concat bindings in
+     let expropt, bindings =
+       match expropt with
+       | Some expr ->
+          let expr, binding = linval expr in
+          Some expr, binding @ bindings
+       | None -> None, bindings
+     in
+     {pexp_desc=Pexp_record(fields,expropt);pexp_loc;pexp_attributes}, bindings
+  | Pexp_array (exprs) ->
+     let exprs, bindings =
+       List.split (List.map linval exprs)
+     in
+     {pexp_desc=Pexp_array(exprs);pexp_loc;pexp_attributes}, List.concat bindings
+  | Pexp_constraint (expr,typ) ->
+     let expr, binding = linval expr
+     in
+     {pexp_desc=Pexp_constraint(expr,typ);pexp_loc;pexp_attributes}, binding
+  | Pexp_coerce (expr,typopt,typ) ->
+     let expr, binding = linval expr
+     in
+     {pexp_desc=Pexp_coerce(expr,typopt,typ);pexp_loc;pexp_attributes}, binding
+  | Pexp_lazy expr ->
+     let expr, binding = linval expr
+     in
+     {pexp_desc=Pexp_lazy(expr);pexp_loc;pexp_attributes}, binding
+  | Pexp_open (oflag,lid,expr) ->
+     let expr, binding = linval expr
+     in
+     {pexp_desc=Pexp_open(oflag,lid,expr);pexp_loc;pexp_attributes}, binding
+  | Pexp_apply (expr,exprs) ->
+     let expr, binding = linval expr in
+     let exprs, bindings =
+       List.split @@
+         List.map
+           (fun (lab,expr) -> let expr,binding = linval expr in (lab,expr),binding)
+           exprs
+     in
+     begin match binding @ List.concat bindings with
+     | [] -> {pexp_desc=Pexp_apply(expr,exprs);pexp_loc;pexp_attributes}, []
+     | _ -> failwith "function call inside %linval cannot contain slot references (!! slotname)"
+     end
+  | Pexp_object _ (* TODO? *)
+  | Pexp_let (_,_,_) | Pexp_function _
+  | Pexp_fun (_,_,_,_) | Pexp_match (_,_) | Pexp_try (_,_)
+  | Pexp_field (_,_) | Pexp_setfield (_,_,_) | Pexp_ifthenelse (_,_,_)
+  | Pexp_sequence (_,_) | Pexp_while (_,_) | Pexp_for (_,_,_,_,_)
+  | Pexp_send (_,_) | Pexp_new _ | Pexp_setinstvar (_,_) | Pexp_override _
+  | Pexp_letmodule (_,_,_) | Pexp_assert _ | Pexp_poly _ | Pexp_newtype (_,_)
+  | Pexp_pack _ | Pexp_extension _ | Pexp_unreachable
+    -> failwith "%linval can only contain values"
+  
 let expression_mapper id mapper exp attrs =
   let pexp_attributes = exp.pexp_attributes @ attrs in
   let pexp_loc=exp.pexp_loc in
@@ -171,8 +262,6 @@ let expression_mapper id mapper exp attrs =
       Some (process_inner { new_exp with pexp_loc; pexp_attributes })
   | "w", _ -> error pexp_loc "Invalid content for extension %w; it must be used as let%w"
 
-  (* slot bind *)
-  (* let%lin {lab} = e1 in e2 ==> Linocaml.Syntax.bind (e1 ~bindto:lab) (fun () -> e2) *)
   | "lin", Pexp_let (Nonrecursive, vbls, expr) ->
      let lin_binding ({pvb_pat;pvb_expr} as vb) =
          let newpat, inserts = lin_pattern pvb_pat in
@@ -188,7 +277,6 @@ let expression_mapper id mapper exp attrs =
      in
      Some (process_inner expression)
 
-  (* pattern match on linear part *)
   | "lin", Pexp_match(matched, cases) ->
      let lin_match ({pc_lhs=pat;pc_rhs=expr} as case) =
        let newpat, inserts = lin_pattern pat in
@@ -202,6 +290,14 @@ let expression_mapper id mapper exp attrs =
      Some (process_inner {pexp_desc=new_exp; pexp_loc; pexp_attributes})
 
   | "lin", _ -> error pexp_loc "Invalid content for extension %lin; it must be \"let%lin slotname = ..\" OR \"match%lin slotname with ..\""
+
+  | "linval", expr ->
+     let new_exp,bindings = linval {pexp_desc=expr;pexp_loc;pexp_attributes} in
+     let new_exp = constr "Linocaml.Lin__" [new_exp] in
+     let new_exp = app (monad_return ()) [new_exp] in
+     let new_exp = add_getslots bindings new_exp in
+     let new_exp = app (matchin ()) [new_exp] in
+     Some(new_exp)
 
   | _ -> None
 
