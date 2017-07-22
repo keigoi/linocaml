@@ -116,19 +116,35 @@ let rec map f s1 s2 =
   in
   let%lin #root = O.linval_t (get O.outer) in
   return ()
+
+let iter f s =
+  let%lin #root = [%linval object method tmp=Empty method outer= !!root end]
+  in
+  let s' = s ##. O.outer
+  in
+  let%lin #O.tmp = get s'
+  in
+  let rec loop () =
+    match%lin get O.tmp with
+    | Cons(x, #O.tmp) -> f x; loop ()
+    | Nil -> return ()
+  in
+  loop () >>
+  let%lin #root = O.linval_t (get O.outer) in
+  return ()
+           
   
+(* again play wth them *)
+let () =
+  let f () =
+    make [1;2;3] >>
+    map (fun x -> x+1) s s >>
+    map string_of_int s s >>
+    iter (fun x -> print_endline x; return ()) s >>
+    return ()
+  in
+  run_ctx f ()
 
-
-(* and same slots can be used for each argument! *)
-let f () =
-  iter (fun x -> return ()) s s
-
-let g () =
-  map string_of_int s s
-
-let h () =
-  let%lin #t = get s in return ()
-;;
 
 (* BAD *)
 (* let f () = *)
@@ -147,7 +163,6 @@ let f () =
 (* let s2 = s @@@ linlens @@@ O.outer @@@ linlens *)
 (* let t2 = t @@@ linlens @@@ O.outer @@@ linlens *)
 (*generated part end*)
-type ('a,'b) u = {f:'a;g:'b}
 let f () =
   let%lin #root = [%linval object method tmp=Internal.__empty method outer= !!root end] in
   let s = s ##. O.outer
