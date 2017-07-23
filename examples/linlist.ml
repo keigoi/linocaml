@@ -12,7 +12,7 @@ type 'a linlist_ = Cons of 'a data * 'a linlist | Nil
 
 (* iterating over a list in slot "s"  *)
 let rec iter f  =
-  match%lin get s with
+  get s >>= function%lin
   | Cons(x, #s) -> f x >> iter f
   | Nil -> return ()
 
@@ -21,7 +21,7 @@ let rec map f =
   match%lin get s with
   | Cons(x, #s) ->
     map f >>
-    put s [%linval Cons(Data (f x), !!s)]
+    put s [%linret Cons(Data (f x), !!s)]
   | Nil -> putval s Nil
 
 (* equivalent to List.rev_map (though this one is non tail-recursive) *)
@@ -29,7 +29,7 @@ let rev_map f =
   let rec loop () =
     match%lin get s with
     | Cons(x, #s) ->
-       put t [%linval Cons(Data (f x), !!t)] >>
+       put t [%linret Cons(Data (f x), !!t)] >>
        loop ()
     | Nil -> return ()
   in
@@ -43,7 +43,7 @@ let rev_map f =
 let rec make = function
   | x::xs ->
      make xs >>
-     put s [%linval Cons(Data x, !!s)]
+     put s [%linret Cons(Data x, !!s)]
   | [] ->
      putval s Nil
 
@@ -70,7 +70,7 @@ let rec map f s1 s2 =
   match%lin get s1 with
   | Cons(x, #s2) ->
      map f s1 s2 >>
-     put s2 [%linval Cons(Data (f x), !! s1)]
+     put s2 [%linret Cons(Data (f x), !! s1)]
   | Nil -> putval s2 Nil
 
 (* more liberal one *)
@@ -78,32 +78,33 @@ let rec map f s1 s2 s3 s4 =
   match%lin get s1 with
   | Cons(x, #s2) ->
      map f s1 s2 s3 s4 >>
-     put s4 [%linval Cons(Data (f x), !! s3)]
+     put s4 [%linret Cons(Data (f x), !! s3)]
   | Nil -> putval s4 Nil
+
 
 module O = struct
   type ('a,'b) t = <tmp:'a; outer:'b>
   [@@deriving lens][@@runner]
 end
+
 let root = {Lens.get=(fun x -> x); Lens.put=(fun _ x -> x)}
 
 
 (* with less slot parameters, by using "temporary environment" *)
 let rec map f s1 s2 =
-  let s1' = s1 ##. O.outer
-  and s2' = s2 ##. O.outer
-  in
   let rec loop () =
     match%lin get O.tmp with
     | Cons(x, #O.tmp) ->
-       loop () >>
-       put O.tmp [%linval Cons(Data (f x), !! O.tmp)]
-    | Nil -> putval O.tmp Nil
+       put O.tmp (loop ()) >>
+       [%linret Cons(Data (f x), !! O.tmp)]
+    | Nil -> linret Nil
   in
-  put root [%linval object method tmp=Empty method outer= !!root end] >>
+  let s1' = s1 ##. O.outer
+  and s2' = s2 ##. O.outer
+  in
+  put root [%linret object method tmp=Empty method outer= !!root end] >>
   put O.tmp (get s1') >>
-  loop () >>
-  put s2' (get O.tmp) >>
+  put s2' (loop ()) >>
   put root (O.linval_t (get O.outer))
 
 let iter f s =
@@ -114,7 +115,7 @@ let iter f s =
     | Cons(x, #O.tmp) -> f x; loop ()
     | Nil -> return ()
   in
-  put root [%linval object method tmp=Empty method outer= !!root end] >>
+  put root [%linret object method tmp=Empty method outer= !!root end] >>
   put O.tmp (get s') >>
   loop () >>
   put root (O.linval_t (get O.outer))
@@ -132,21 +133,19 @@ let () =
 
 (* with less slot parameters, by using "temporary environment" *)
 let map f s =
-  lin_split begin
     let s' = s ##. O.outer
     in
     let rec loop () =
       match%lin get O.tmp with
       | Cons(x, #O.tmp) ->
-         loop () >>
-         put O.tmp [%linval Cons(Data (f x), !! O.tmp)]
-      | Nil -> putval O.tmp Nil
+         put O.tmp (loop ()) >>
+         [%linret Cons(Data (f x), !! O.tmp)]
+      | Nil -> linret Nil
     in
-    put root [%linval object method tmp=Empty method outer= !!root end] >>
+    put root [%linret object method tmp=Empty method outer= !!root end] >>
     put O.tmp (get s') >>
-    loop () >>
-    put root (O.linval_t [%linval (!! O.outer, !! O.tmp) ])
-  end
+    put O.tmp (loop ()) >>
+    lin_split @@ put root (O.linval_t [%linret (!! O.outer, !! O.tmp) ])
   
 (* again play wth them *)
 let () =
@@ -161,7 +160,7 @@ let () =
 let f () =
   let s = s ##. O.outer
   in
-  put root [%linval object method tmp=Empty method outer= !!root end] >>
+  put root [%linret object method tmp=Empty method outer= !!root end] >>
   let%lin `A(#O.tmp) = get s in
   put s (get O.tmp) >>
   put root (O.linval_t (get O.outer))

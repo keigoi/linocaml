@@ -40,12 +40,9 @@ let runmonad () =
 
 let disposeenv () =
   longident (!root_module ^ ".Internal.__dispose_env")
-  
-let matchout () =
-  longident (!root_module ^ ".Internal.__linval_out")
-  
-let matchin () =
-  longident (!root_module ^ ".Internal.__linval_in")
+
+let mkbind () =
+  longident (!root_module ^ ".Internal.__mkbind")
   
 let error loc (s:string) =
   Location.raise_errorf ~loc "%s" s
@@ -117,7 +114,7 @@ let bindbody_of_let exploc bindings exp =
     | binding :: t ->
       let name = (evar (newname "let")) [@metaloc binding.pvb_expr.pexp_loc] in
       let f = [%expr (fun [%p binding.pvb_pat] -> [%e make (i+1) t])] [@metaloc binding.pvb_loc] in
-      let new_exp = [%expr [%e monad_bind ()] [%e name] [%e f]] [@metaloc exploc] in
+      let new_exp = [%expr [%e monad_bind ()] [%e name] [%e app (mkbind ()) [f]]] [@metaloc exploc] in
       { new_exp with pexp_attributes = binding.pvb_attributes }
   in
   make 0 bindings
@@ -163,11 +160,11 @@ let lin_pattern oldpat =
   newpat, List.map insert_expr lin_vars
 
 let add_setslots es expr =
-  List.fold_right (fun e expr -> app (monad_bind ()) [e; lam (punit ()) expr]) es expr
+  List.fold_right (fun e expr -> app (monad_bind ()) [e; app (mkbind ()) [lam (punit ()) expr]]) es expr
 
 let add_getslots es expr =
   List.fold_right (fun (v,e) expr ->
-      app (monad_bind ()) [app (getfunc ()) [e]; lam (pvar v) expr]) es expr
+      app (monad_bind ()) [app (getfunc ()) [e]; app (mkbind ()) [lam (pvar v) expr]]) es expr
 
 let rec linval ({pexp_desc;pexp_loc;pexp_attributes} as outer) =
   match pexp_desc with
@@ -289,13 +286,12 @@ let expression_mapper id mapper exp attrs =
   | "lin", Pexp_let (Nonrecursive, vbls, expr) ->
      let lin_binding ({pvb_pat;pvb_expr} as vb) =
          let newpat, inserts = lin_pattern pvb_pat in
-         let new_expr = app (matchout ()) [pvb_expr] in
-         {vb with pvb_pat=newpat;pvb_expr=new_expr}, inserts
+         {vb with pvb_pat=newpat}, inserts
      in
      let new_vbls, inserts = List.split (List.map lin_binding vbls) in
      let new_expr = add_setslots (List.concat inserts) expr in
      let make_bind {pvb_pat;pvb_expr;pvb_loc;pvb_attributes} expr =
-       app ~loc:pexp_loc (monad_bind ()) [pvb_expr; lam ~loc:pvb_loc pvb_pat expr]
+       app ~loc:pexp_loc (monad_bind ()) [pvb_expr; app (mkbind ()) [lam ~loc:pvb_loc pvb_pat expr]]
      in
      let expression = List.fold_right make_bind new_vbls new_expr
      in
@@ -308,19 +304,31 @@ let expression_mapper id mapper exp attrs =
        {case with pc_lhs=newpat;pc_rhs=newexpr}
      in
      let cases = List.map lin_match cases in
-     let new_matched = app (matchout ()) [matched] in
-     let new_exp = Pexp_apply(monad_bind (),[(Nolabel,new_matched); (Nolabel,Exp.function_ cases)])
+     let new_exp = Pexp_apply(monad_bind (),[(Nolabel,matched); (Nolabel, app (mkbind ()) [Exp.function_ cases])])
      in
      Some (process_inner {pexp_desc=new_exp; pexp_loc; pexp_attributes})
 
+  | "lin", Pexp_function(cases) ->
+     let lin_match ({pc_lhs=pat;pc_rhs=expr} as case) =
+       let newpat, inserts = lin_pattern pat in
+       let newexpr = add_setslots inserts expr in
+       {case with pc_lhs=newpat;pc_rhs=newexpr}
+     in
+     let cases = List.map lin_match cases in
+     Some (app (mkbind ()) [process_inner {pexp_desc=Pexp_function(cases); pexp_loc; pexp_attributes}])
+     
+  | "lin", Pexp_fun(Nolabel,None,pat,expr) ->
+     let newpat, inserts = lin_pattern pat in
+     let newexpr = add_setslots inserts expr in
+     Some (app (mkbind ()) [process_inner {pexp_desc=Pexp_fun(Nolabel,None,newpat,newexpr); pexp_loc; pexp_attributes}])
+     
   | "lin", _ -> error pexp_loc "Invalid content for extension %lin; it must be \"let%lin slotname = ..\" OR \"match%lin slotname with ..\""
 
-  | "linval", expr ->
+  | "linret", expr ->
      let new_exp,bindings = linval {pexp_desc=expr;pexp_loc;pexp_attributes} in
      let new_exp = constr "Linocaml.Lin_Internal__" [new_exp] in
      let new_exp = app (monad_return ()) [new_exp] in
      let new_exp = add_getslots bindings new_exp in
-     let new_exp = app (matchin ()) [new_exp] in
      Some(new_exp)
 
   | _ -> None
@@ -354,7 +362,7 @@ let runner ({ ptype_loc = loc } as type_decl) =
     and linval = disposeenv () in
     let quoter = Ppx_deriving.create_quoter () in
     let runnertyp = Typ.arrow Nolabel (Typ.arrow Nolabel (tconstr "unit" []) (tconstr "Linocaml.monad" [objtyp; objtyp; Typ.any ()])) (Typ.any ())
-    and linvaltyp = Typ.arrow Nolabel (tconstr "Linocaml.linval" [Typ.any (); objtyp; Typ.any ()]) (Typ.any ()) in
+    and linvaltyp = Typ.arrow Nolabel (tconstr "Linocaml.monad" [Typ.any (); objtyp; Typ.any ()]) (Typ.any ()) in
     let runner = {pstr_desc = Pstr_value (Nonrecursive, [Vb.mk (Pat.constraint_ (pvar ("run_" ^ name)) runnertyp) (Ppx_deriving.sanitize ~quoter runner)]); pstr_loc = Location.none}
     and linval = {pstr_desc = Pstr_value (Nonrecursive, [Vb.mk (Pat.constraint_ (pvar ("linval_"^name)) linvaltyp) (Ppx_deriving.sanitize ~quoter linval)]); pstr_loc = Location.none}
     in
