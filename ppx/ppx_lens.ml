@@ -9,7 +9,7 @@ let deriver = "lens"
 let raise_errorf = Ppx_deriving.raise_errorf
 
 let getterfield () = "Lens.get"
-let setterfield () = "Lens.set"
+let setterfield () = "Lens.put"
 
                  
 let parse_options options =

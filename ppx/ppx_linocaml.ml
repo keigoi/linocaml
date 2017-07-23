@@ -24,16 +24,16 @@ let monad_return () =
   longident (!root_module ^ ".return")
   
 let setfunc () =
-  longident (!root_module ^ ".set")
+  longident (!root_module ^ ".putval")
   
 let unsetfunc () =
-  longident (!root_module ^ ".Internal.__unset")
+  longident (!root_module ^ ".Internal.__dispose_one")
   
 let getfunc () =
-  longident (!root_module ^ ".Internal.__get")
+  longident (!root_module ^ ".Internal.__peek")
   
 let emptyslot () =
-  longident (!root_module ^ ".Internal.__empty")
+  longident (!root_module ^ ".empty")
   
 let runmonad () =
   longident (!root_module ^ ".Internal.__run")
@@ -42,10 +42,10 @@ let disposeenv () =
   longident (!root_module ^ ".Internal.__dispose_env")
   
 let matchout () =
-  longident (!root_module ^ ".Internal.__match_out")
+  longident (!root_module ^ ".Internal.__linval_out")
   
 let matchin () =
-  longident (!root_module ^ ".Internal.__match_in")
+  longident (!root_module ^ ".Internal.__linval_in")
   
 let error loc (s:string) =
   Location.raise_errorf ~loc "%s" s
@@ -351,7 +351,7 @@ let runner ({ ptype_loc = loc } as type_decl) =
     and linval = disposeenv () in
     let quoter = Ppx_deriving.create_quoter () in
     let runnertyp = Typ.arrow Nolabel (Typ.arrow Nolabel (tconstr "unit" []) (tconstr "Linocaml.monad" [objtyp; objtyp; Typ.any ()])) (Typ.any ())
-    and linvaltyp = Typ.arrow Nolabel (tconstr "Linocaml.lin_match" [Typ.any (); objtyp; Typ.any ()]) (Typ.any ()) in
+    and linvaltyp = Typ.arrow Nolabel (tconstr "Linocaml.linval" [Typ.any (); objtyp; Typ.any ()]) (Typ.any ()) in
     let runner = {pstr_desc = Pstr_value (Nonrecursive, [Vb.mk (Pat.constraint_ (pvar ("run_" ^ name)) runnertyp) (Ppx_deriving.sanitize ~quoter runner)]); pstr_loc = Location.none}
     and linval = {pstr_desc = Pstr_value (Nonrecursive, [Vb.mk (Pat.constraint_ (pvar ("linval_"^name)) linvaltyp) (Ppx_deriving.sanitize ~quoter linval)]); pstr_loc = Location.none}
     in
@@ -375,7 +375,7 @@ let mapper_fun _ =
      let e1 = expr mapper e1
      and e2 = expr mapper e2 in
      (* brain-dead specialization of Lens.compose. problematic in various aspects: name capture, duplicated code, ... *)
-     [%expr let open Lens in {get=(fun out1__ -> [%e e1].get ([%e e2].get out1__)); set=(fun out1__ b__ -> [%e e2].set out1__ ([%e e1].set ([%e e2].get out1__) b__))}]
+     [%expr let open Lens in {get=(fun out1__ -> [%e e1].get ([%e e2].get out1__)); put=(fun out1__ b__ -> [%e e2].put out1__ ([%e e1].put ([%e e2].get out1__) b__))}]
   | _ -> default_mapper.expr mapper outer
   and stritem mapper outer =
     match outer with
