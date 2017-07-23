@@ -21,7 +21,7 @@ let rec map f =
   match%lin get s with
   | Cons(x, #s) ->
     map f >>
-    put s [%linval Cons(Data_Internal__ (f x), !!s)]
+    put s [%linval Cons(Data (f x), !!s)]
   | Nil -> putval s Nil
 
 (* equivalent to List.rev_map (though this one is non tail-recursive) *)
@@ -29,7 +29,7 @@ let rev_map f =
   let rec loop () =
     match%lin get s with
     | Cons(x, #s) ->
-       put t [%linval Cons(Data_Internal__ (f x), !!t)] >>
+       put t [%linval Cons(Data (f x), !!t)] >>
        loop ()
     | Nil -> return ()
   in
@@ -43,7 +43,7 @@ let rev_map f =
 let rec make = function
   | x::xs ->
      make xs >>
-     put s [%linval Cons(Data_Internal__ x, !!s)]
+     put s [%linval Cons(Data x, !!s)]
   | [] ->
      putval s Nil
 
@@ -70,7 +70,7 @@ let rec map f s1 s2 =
   match%lin get s1 with
   | Cons(x, #s2) ->
      map f s1 s2 >>
-     put s2 [%linval Cons(Data_Internal__ (f x), !! s1)]
+     put s2 [%linval Cons(Data (f x), !! s1)]
   | Nil -> putval s2 Nil
 
 (* more liberal one *)
@@ -78,7 +78,7 @@ let rec map f s1 s2 s3 s4 =
   match%lin get s1 with
   | Cons(x, #s2) ->
      map f s1 s2 s3 s4 >>
-     put s4 [%linval Cons(Data_Internal__ (f x), !! s3)]
+     put s4 [%linval Cons(Data (f x), !! s3)]
   | Nil -> putval s4 Nil
 
 module O = struct
@@ -97,7 +97,7 @@ let rec map f s1 s2 =
     match%lin get O.tmp with
     | Cons(x, #O.tmp) ->
        loop () >>
-       put O.tmp [%linval Cons(Data_Internal__ (f x), !! O.tmp)]
+       put O.tmp [%linval Cons(Data (f x), !! O.tmp)]
     | Nil -> putval O.tmp Nil
   in
   put root [%linval object method tmp=Empty method outer= !!root end] >>
@@ -139,7 +139,7 @@ let map f s =
       match%lin get O.tmp with
       | Cons(x, #O.tmp) ->
          loop () >>
-         put O.tmp [%linval Cons(Data_Internal__ (f x), !! O.tmp)]
+         put O.tmp [%linval Cons(Data (f x), !! O.tmp)]
       | Nil -> putval O.tmp Nil
     in
     put root [%linval object method tmp=Empty method outer= !!root end] >>

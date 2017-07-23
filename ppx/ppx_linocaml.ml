@@ -183,6 +183,9 @@ let rec linval ({pexp_desc;pexp_loc;pexp_attributes} as outer) =
   | Pexp_tuple (exprs) ->
     let exprs, bindings = List.split (List.map linval exprs) in
     {pexp_desc=Pexp_tuple(exprs);pexp_loc;pexp_attributes}, List.concat bindings
+
+  | Pexp_construct ({txt=Lident "Data"},Some(expr)) ->
+     constr ~loc:pexp_loc ~attrs:pexp_attributes "Linocaml.Data_Internal__" [expr], []
        
   | Pexp_construct (lid,Some(expr)) ->
      let expr, binding = linval expr in
