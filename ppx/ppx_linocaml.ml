@@ -176,7 +176,7 @@ let rec linval ({pexp_desc;pexp_loc;pexp_attributes} as outer) =
   | Pexp_variant (_,None) ->
      outer, []
     
-  | Pexp_apply ({pexp_desc=Pexp_ident {txt=Lident"!!"}} , [(Nolabel,exp)]) ->
+  | Pexp_apply ({pexp_desc=Pexp_ident {txt=Lident"!!"}} , [("",exp)]) ->
      let newvar = newname "linval" in
      constr ~loc:pexp_loc "Linocaml.Lin_Internal__" [longident ~loc:pexp_loc newvar], [(newvar,exp)]
      
@@ -264,7 +264,7 @@ let rec linval ({pexp_desc;pexp_loc;pexp_attributes} as outer) =
   | Pexp_sequence (_,_) | Pexp_while (_,_) | Pexp_for (_,_,_,_,_)
   | Pexp_send (_,_) | Pexp_new _ | Pexp_setinstvar (_,_) | Pexp_override _
   | Pexp_letmodule (_,_,_) | Pexp_assert _ | Pexp_newtype (_,_)
-  | Pexp_pack _ | Pexp_extension _ | Pexp_unreachable
+  | Pexp_pack _ | Pexp_extension _
     -> failwith "%linval can only contain values"
   
 let expression_mapper id mapper exp attrs =
@@ -307,7 +307,7 @@ let expression_mapper id mapper exp attrs =
        {case with pc_lhs=newpat;pc_rhs=newexpr}
      in
      let cases = List.map lin_match cases in
-     let new_exp = Pexp_apply(monad_linbind (),[(Nolabel,matched); (Nolabel, app (mkbind ()) [Exp.function_ cases])])
+     let new_exp = Pexp_apply(monad_linbind (),[("",matched); ("", app (mkbind ()) [Exp.function_ cases])])
      in
      Some (process_inner {pexp_desc=new_exp; pexp_loc; pexp_attributes})
 
@@ -320,10 +320,10 @@ let expression_mapper id mapper exp attrs =
      let cases = List.map lin_match cases in
      Some (app (mkbind ()) [process_inner {pexp_desc=Pexp_function(cases); pexp_loc; pexp_attributes}])
      
-  | "lin", Pexp_fun(Nolabel,None,pat,expr) ->
+  | "lin", Pexp_fun("",None,pat,expr) ->
      let newpat, inserts = lin_pattern pat in
      let newexpr = add_setslots inserts expr in
-     Some (app (mkbind ()) [process_inner {pexp_desc=Pexp_fun(Nolabel,None,newpat,newexpr); pexp_loc; pexp_attributes}])
+     Some (app (mkbind ()) [process_inner {pexp_desc=Pexp_fun("",None,newpat,newexpr); pexp_loc; pexp_attributes}])
      
   | "lin", _ -> error pexp_loc "Invalid content for extension %lin; it must be \"let%lin slotname = ..\" OR \"match%lin slotname with ..\""
 
@@ -364,8 +364,8 @@ let runner ({ ptype_loc = loc } as type_decl) =
     let runner = mkfun (pvar "x") (mkfun (pconstr "()" []) ((app (runmonad ()) [app (evar "x") [constr "()" []]; obj])))
     and linval = disposeenv () in
     let quoter = Ppx_deriving.create_quoter () in
-    let runnertyp = Typ.arrow Nolabel (Typ.arrow Nolabel (tconstr "unit" []) (tconstr "Linocaml.monad" [objtyp; objtyp; Typ.any ()])) (Typ.any ())
-    and linvaltyp = Typ.arrow Nolabel (tconstr "Linocaml.monad" [Typ.any (); objtyp; Typ.any ()]) (Typ.any ()) in
+    let runnertyp = Typ.arrow "" (Typ.arrow "" (tconstr "unit" []) (tconstr "Linocaml.monad" [objtyp; objtyp; Typ.any ()])) (Typ.any ())
+    and linvaltyp = Typ.arrow "" (tconstr "Linocaml.monad" [Typ.any (); objtyp; Typ.any ()]) (Typ.any ()) in
     let runner = {pstr_desc = Pstr_value (Nonrecursive, [Vb.mk (Pat.constraint_ (pvar ("run_" ^ name)) runnertyp) (Ppx_deriving.sanitize ~quoter runner)]); pstr_loc = Location.none}
     and linval = {pstr_desc = Pstr_value (Nonrecursive, [Vb.mk (Pat.constraint_ (pvar ("linval_"^name)) linvaltyp) (Ppx_deriving.sanitize ~quoter linval)]); pstr_loc = Location.none}
     in
@@ -393,7 +393,7 @@ let mapper_fun _ =
   | _ -> default_mapper.expr mapper outer
   and stritem mapper outer =
     match outer with
-    | {pstr_desc = Pstr_type (_, type_decls)} ->
+    | {pstr_desc = Pstr_type type_decls} ->
        let runners =
          List.map (fun type_decl ->
            if has_runner type_decl.ptype_attributes then
