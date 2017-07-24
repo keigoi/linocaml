@@ -20,6 +20,9 @@ let longident ?loc str = Exp.ident (lid ?loc str)
 let monad_bind () =
   longident (!root_module ^ ".bind")
 
+let monad_linbind () =
+  longident (!root_module ^ ".linbind")
+
 let monad_return () =
   longident (!root_module ^ ".return")
   
@@ -114,7 +117,7 @@ let bindbody_of_let exploc bindings exp =
     | binding :: t ->
       let name = (evar (newname "let")) [@metaloc binding.pvb_expr.pexp_loc] in
       let f = [%expr (fun [%p binding.pvb_pat] -> [%e make (i+1) t])] [@metaloc binding.pvb_loc] in
-      let new_exp = [%expr [%e monad_bind ()] [%e name] [%e app (mkbind ()) [f]]] [@metaloc exploc] in
+      let new_exp = [%expr [%e monad_bind ()] [%e name] [%e f]] [@metaloc exploc] in
       { new_exp with pexp_attributes = binding.pvb_attributes }
   in
   make 0 bindings
@@ -160,11 +163,11 @@ let lin_pattern oldpat =
   newpat, List.map insert_expr lin_vars
 
 let add_setslots es expr =
-  List.fold_right (fun e expr -> app (monad_bind ()) [e; app (mkbind ()) [lam (punit ()) expr]]) es expr
+  List.fold_right (fun e expr -> app (monad_linbind ()) [e; app (mkbind ()) [lam (punit ()) expr]]) es expr
 
 let add_getslots es expr =
   List.fold_right (fun (v,e) expr ->
-      app (monad_bind ()) [app (getfunc ()) [e]; app (mkbind ()) [lam (pvar v) expr]]) es expr
+      app (monad_linbind ()) [app (getfunc ()) [e]; app (mkbind ()) [lam (pvar v) expr]]) es expr
 
 let rec linval ({pexp_desc;pexp_loc;pexp_attributes} as outer) =
   match pexp_desc with
@@ -291,7 +294,7 @@ let expression_mapper id mapper exp attrs =
      let new_vbls, inserts = List.split (List.map lin_binding vbls) in
      let new_expr = add_setslots (List.concat inserts) expr in
      let make_bind {pvb_pat;pvb_expr;pvb_loc;pvb_attributes} expr =
-       app ~loc:pexp_loc (monad_bind ()) [pvb_expr; app (mkbind ()) [lam ~loc:pvb_loc pvb_pat expr]]
+       app ~loc:pexp_loc (monad_linbind ()) [pvb_expr; app (mkbind ()) [lam ~loc:pvb_loc pvb_pat expr]]
      in
      let expression = List.fold_right make_bind new_vbls new_expr
      in
@@ -304,7 +307,7 @@ let expression_mapper id mapper exp attrs =
        {case with pc_lhs=newpat;pc_rhs=newexpr}
      in
      let cases = List.map lin_match cases in
-     let new_exp = Pexp_apply(monad_bind (),[(Nolabel,matched); (Nolabel, app (mkbind ()) [Exp.function_ cases])])
+     let new_exp = Pexp_apply(monad_linbind (),[(Nolabel,matched); (Nolabel, app (mkbind ()) [Exp.function_ cases])])
      in
      Some (process_inner {pexp_desc=new_exp; pexp_loc; pexp_attributes})
 

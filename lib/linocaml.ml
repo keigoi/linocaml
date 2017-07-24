@@ -11,6 +11,12 @@ let bind f g pre = match f pre with mid, a -> g a mid
 let (>>=) = bind
 let (>>) m n = m >>= (fun () -> n)
 
+let linbind f g pre = match f pre with mid, a -> g a mid
+let (>>>==) = bind
+
+let linret a pre = pre, (Lin_Internal__ a)
+let linret_ f pre = pre, (Lin_Internal__ (f ()))
+
 open Lens
 
 let get {get;put} pre = put pre Empty, get pre
@@ -29,7 +35,6 @@ let lin_split m pre =
   let Lin_Internal__ (a, b), () = m pre in
   a, b
 
-let linret a pre = pre, (Lin_Internal__ a)
 
 module Internal = struct
   let __run m pre = snd (m pre)
@@ -43,6 +48,7 @@ end
 module Syntax = struct
   let return = return
   let bind = bind
+  let linbind = bind
   let putval = putval
   let empty = Empty
 

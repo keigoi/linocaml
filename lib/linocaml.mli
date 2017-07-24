@@ -8,12 +8,19 @@ type 'a data = Data_Internal__ of 'a
 type 'a lin  = Lin_Internal__ of 'a
    
 val return : 'a -> ('p,'p,'a) monad
-val bind : ('pre,'mid,'a) monad -> ('a, 'mid,'post,'b) bind -> ('pre,'post,'b) monad
-val (>>=) : ('pre,'mid,'a) monad -> ('a, 'mid,'post,'b) bind -> ('pre,'post,'b) monad
+
+(* bind is limited to type unit *)
+val bind : ('pre,'mid,unit) monad -> (unit -> ('mid,'post,'b) monad) -> ('pre,'post,'b) monad
+val (>>=) : ('pre,'mid,unit) monad -> (unit -> ('mid,'post,'b) monad) -> ('pre,'post,'b) monad
 val (>>) : ('pre,'mid,unit) monad -> ('mid,'post,'b) monad -> ('pre,'post,'b) monad
+
+(* extract a linval *)
+val linbind : ('pre,'mid,'a) monad -> ('a, 'mid,'post,'b) bind -> ('pre,'post,'b) monad
+val (>>>==) : ('pre,'mid,'a) monad -> ('a, 'mid,'post,'b) bind -> ('pre,'post,'b) monad
 
 (* make a linval *)
 val linret : 'a -> ('p,'p,'a lin) monad
+val linret_ : (unit -> 'a) -> ('p,'p,'a lin) monad
 
 (* get and put on slots *)
 val get : ('a lin,empty,'pre,'post) slot -> ('pre,'post,'a lin) monad
@@ -25,7 +32,8 @@ val map : ('a data lin, 'b data lin, 'pre, 'post) slot -> ('a -> 'b * 'c) -> ('p
 val lin_split : ('p, ('a lin * 'b lin) lin, unit) monad -> ('p, 'a lin, 'b lin) monad
 
 module Syntax : sig
-  val bind : ('pre,'mid,'a) monad -> ('a, 'mid,'post,'b) bind -> ('pre,'post,'b) monad
+  val bind : ('pre,'mid,unit) monad -> (unit -> ('mid,'post,'b) monad) -> ('pre,'post,'b) monad
+  val linbind : ('pre,'mid,'a) monad -> ('a, 'mid,'post,'b) bind -> ('pre,'post,'b) monad
   val return : 'a -> ('p,'p,'a) monad
 
   val putval : (empty,'a lin,'pre,'post) slot -> 'a -> ('pre,'post,unit) monad

@@ -12,7 +12,7 @@ type 'a linlist_ = Cons of 'a data * 'a linlist | Nil
 
 (* iterating over a list in slot "s"  *)
 let rec iter f  =
-  get s >>= function%lin
+  get s >>>== function%lin
   | Cons(x, #s) -> f x >> iter f
   | Nil -> return ()
 
@@ -29,8 +29,8 @@ let rev_map f =
   let rec loop () =
     match%lin get s with
     | Cons(x, #s) ->
-       put t [%linret Cons(Data (f x), !!t)] >>
-       loop ()
+       put t [%linret Cons(Data (f x), !!t)] >>=
+       loop
     | Nil -> return ()
   in
   (* accumulator *)
