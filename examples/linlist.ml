@@ -6,12 +6,32 @@ open Linocaml
 type ('a,'b,'c) ctx = <s:'a; t:'b; u:'c>
 [@@deriving lens]
 [@@runner]
+(*
+Generated from [@@runner]:
+val run_ctx :
+  (unit ->
+   (< s : empty; t : empty; u : empty > lin,
+    < s : empty; t : empty; u : empty > lin, 'a) monad) 
+  -> unit -> 'a
+val linval_ctx :
+  ('a, < s : empty; t : empty; u : empty > lin, 'b) monad ->
+  ('a, empty, 'b) monad
 
+Generated from [@@deriving lens]:
+val s :
+  ('a, 'aa, < s : 'a; t : 'b; u : 'c > lin, < s : 'aa; t : 'b; u : 'c > lin) slot
+val t :
+  ('b, 'bb, < s : 'a; t : 'b; u : 'c > lin, < s : 'a; t : 'bb; u : 'c > lin) slot
+val u :
+  ('c, 'cc, < s : 'a; t : 'b; u : 'c > lin, < s : 'a; t : 'b; u : 'cc > lin) slot
+*)                      
+
+(* linearly typed list *)
 type 'a linlist_ = Cons of 'a data * 'a linlist | Nil
  and 'a linlist = 'a linlist_ lin
 
 (* iterating over a list in slot "s"  *)
-let rec iter f  =
+let rec iter f =
   get s >>>== function%lin
   | Cons(x, #s) -> f x >> iter f
   | Nil -> return ()
