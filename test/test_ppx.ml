@@ -1,23 +1,24 @@
 let (!%) = Printf.sprintf
 
 open Linocaml
+open Linocaml.Std
 
 type 't plist = ([`Cons of 't data * 'a lin | `Nil] as 'a) lin
                
-(* declare a single slot 's' *)
+(* declare slots s and t *)
 type ('a,'b) ctx = <s : 'a; t : 'b>
 [@@deriving lens]
 [@@runner]
-            
+
 module LinList = struct
   (* turn a normal list into linear list *)
   let rec make = function
     | x::xs ->
        make xs >>
-       let%lin #s = [%linval `Cons(Data x, !!s)]
+       let%lin #s = [%linret `Cons(Data x, !!s)]
        in return ()
     | [] ->
-       set s `Nil
+       putval s `Nil
 
   let rec iter s1 s2 f =
     match%lin get s1 with
@@ -33,4 +34,4 @@ let f () =
   return ()
 
 let () =
-  run_ctx (f ())
+  run_ctx f ()

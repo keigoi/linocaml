@@ -1,62 +1,69 @@
-type ('pre,'post,'a) monad = 'pre -> 'post * 'a
-type ('a,'b,'pre,'post) slot = ('a,'b,'pre,'post) Lens.t
-type ('a,'pre,'post,'b) bind = 'a -> ('pre, 'post, 'b) monad
+include Linocaml_base
 
-type empty = Empty
-type 'a data = Data_Internal__ of 'a
-type 'a lin  = Lin_Internal__ of 'a
+module Make(M:S.IO)
+       : S.IO_LIN with type 'a io = 'a M.t
+                                                 = struct
+  open Linocaml_base
 
-let return a pre = pre, a
-let bind f g pre = match f pre with mid, a -> g a mid
-let (>>=) = bind
-let (>>) m n = m >>= (fun () -> n)
-
-let linbind f g pre = match f pre with mid, a -> g a mid
-let (>>>==) = bind
-
-let linret a pre = pre, (Lin_Internal__ a)
-let linret_ f pre = pre, (Lin_Internal__ (f ()))
-
-open Lens
-
-let get {get;put} pre = put pre Empty, get pre
-let put {get;put} m pre =
-  let mid, v = m pre in
-  put mid v, ()
-
-let putval {put} a pre = put pre (Lin_Internal__ a), ()
-
-let map {get;put} f pre =
-  let Lin_Internal__ (Data_Internal__ a) = get pre in
-  let b,c = f a in
-  put pre (Lin_Internal__ (Data_Internal__ b)), c
-
-let lin_split m pre =
-  let Lin_Internal__ (a, b), () = m pre in
-  a, b
-
-
-module Internal = struct
-  let __run m pre = snd (m pre)
-  let __dispose_one {put} pre = put pre Empty, ()
-  let __dispose_env m pre =
-    let a = __run m pre in Empty, a
-  let __peek {get;put} pre = put pre Empty, match get pre with Lin_Internal__ a -> a
-  let __monad f = f
-end
-
-module Syntax = struct
-  let return = return
-  let bind = bind
-  let linbind = bind
-  let putval = putval
-  let empty = Empty
-
+  type +'a io = 'a M.t
+  type ('pre,'post,'a) monad = 'pre -> ('post * 'a) io
+  type ('a,'pre,'post,'b) bindfun = 'a -> ('pre, 'post, 'b) monad
+  
+  
+  let return a pre = M.return (pre, a)
+  let bind f g pre = M.(>>=) (f pre) (fun (mid, ()) -> g () mid)
+  let (>>=) = bind
+  let (>>) m n = m >>= (fun () -> n)
+  
+  let linbind f g pre = M.(>>=) (f pre) (fun (mid, a) -> g a mid)
+  let (>>>==) = linbind
+  
+  let linret a pre = M.return (pre, (Lin_Internal__ a))
+  let linret_ f pre = M.return (pre, (Lin_Internal__ (f ())))
+  
+  open Lens
+  
+  let get {get;put} pre = M.return (put pre Empty, get pre)
+  let put {get;put} m pre =
+    M.(>>=) (m pre) (fun (mid, v) -> M.return (put mid v, ()))
+  
+  let putval {put} a pre = M.return (put pre (Lin_Internal__ a), ())
+  
+  let map {get;put} f pre =
+    let Lin_Internal__ (Data_Internal__ a) = get pre in
+    M.(>>=) (f a) (fun (b,c) ->
+    M.return (put pre (Lin_Internal__ (Data_Internal__ b)), c))
+  
+  let lin_split m pre =
+    M.(>>=) (m pre) (fun (Lin_Internal__ (a, b), ()) ->
+    M.return (a, b))
+  
+  
   module Internal = struct
-    let __mkbind f = f
-    let __run = Internal.__run
-    let __dispose_one = Internal.__dispose_one
-    let __dispose_env = Internal.__dispose_env
-    let __peek = Internal.__peek
+    let __run m pre = M.(>>=) (m pre) (fun (_,a) -> M.return a)
+    let __dispose_one {put} pre = M.return (put pre Empty, ())
+    let __dispose_env m pre =
+      M.(>>=) (__run m pre) (fun a -> M.return (Empty, a))
+    let __takeval {get;put} pre = M.return (put pre Empty, match get pre with Lin_Internal__ a -> a)
+    let __monad f = f
+  end
+  
+  module Syntax = struct
+    let return = return
+    let bind = bind
+    let linbind = linbind
+    let putval = putval
+    let empty = Empty
+  
+    module Internal = struct
+      let __mkbindfun f = f
+      let __run = Internal.__run
+      let __dispose_one = Internal.__dispose_one
+      let __dispose_env = Internal.__dispose_env
+      let __takeval = Internal.__takeval
+    end
   end
 end
+
+module Std = Make(Io_std)
+module Lwt = Make(Io_lwt)

@@ -11,8 +11,9 @@ Library linocaml
   Path:       lib
   BuildTools: ocamlbuild
   Modules:
-    Lens, Linocaml
+    Lens, Linocaml_base, S, Io_lwt, Io_std, Linocaml
   BuildDepends:
+    lwt, lwt.unix
 
 Library ppx
   Path: ppx

@@ -1,7 +1,8 @@
 # OASIS_START
-# DO NOT EDIT (digest: 08327d11af4da2f21216708ba83fe96f)
+# DO NOT EDIT (digest: e555798d703a69caa8bb98fc399f606a)
 version = "0.1"
 description = "A library with some ppx"
+requires = "lwt lwt.unix"
 archive(byte) = "linocaml.cma"
 archive(byte, plugin) = "linocaml.cma"
 archive(native) = "linocaml.cmxa"

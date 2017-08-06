@@ -1,5 +1,9 @@
 # OASIS_START
-# DO NOT EDIT (digest: 16aa58f4754027ef4736f6c35f1f97db)
+# DO NOT EDIT (digest: 5f94a202b5cc6a1ac9ccc219b8be6f62)
 Lens
+Linocaml_base
+S
+Io_lwt
+Io_std
 Linocaml
 # OASIS_STOP

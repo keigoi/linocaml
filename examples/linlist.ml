@@ -1,6 +1,7 @@
 (* Example: linearly-typed lists *)
 
 open Linocaml
+open Linocaml.Std
 
 (* declaring slots *)
 type ('a,'b,'c) ctx = <s:'a; t:'b; u:'c>
