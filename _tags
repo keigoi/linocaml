@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: 46b1c8d89f00853e3e12b5b1fa96791d)
+# DO NOT EDIT (digest: e914b533aebb7c9821c3cffaa61bff43)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -16,8 +16,14 @@ true: annot, bin_annot
 "_darcs": not_hygienic
 # Library linocaml
 "lib/linocaml.cmxs": use_linocaml
-<lib/*.ml{,i,y}>: pkg_lwt
-<lib/*.ml{,i,y}>: pkg_lwt.unix
+"lib/lens.cmx": for-pack(Linocaml)
+"lib/base.cmx": for-pack(Linocaml)
+"lib/direct.cmx": for-pack(Linocaml)
+# Library linocaml_lwt
+"lwt/linocaml_lwt.cmxs": use_linocaml_lwt
+<lwt/*.ml{,i,y}>: pkg_lwt
+<lwt/*.ml{,i,y}>: pkg_lwt.unix
+<lwt/*.ml{,i,y}>: use_linocaml
 # Library ppx
 "ppx/ppx.cmxs": use_ppx
 # Library ppx_lens

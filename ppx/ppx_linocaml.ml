@@ -99,7 +99,7 @@ let rec traverse f(*var wrapper*) g(*#tconst wrapper*) ({ppat_desc} as patouter)
                    
   | Ppat_record (_, Open)
   | Ppat_or (_,_) | Ppat_unpack _
-  | Ppat_exception _ | Ppat_extension _ ->
+  | Ppat_exception _ | Ppat_extension _ | Ppat_open _ ->
        error patouter.ppat_loc "%lin cannot handle this pattern"
 
 (* [_ = e0; _ = e1; ..] ==> 
@@ -116,7 +116,7 @@ let replace_bindings bindings =
 let make_bindbody bindings vars origbody =
   List.fold_right2 (fun binding var exp ->
       let name = evar ~loc:binding.pvb_expr.pexp_loc var in
-      let f = Exp.fun_ ~loc:binding.pvb_loc "" None binding.pvb_pat exp in
+      let f = Exp.fun_ ~loc:binding.pvb_loc Nolabel None binding.pvb_pat exp in
       let new_exp = app ~loc:exp.pexp_loc (monad_bind ()) [name; f] in
       { new_exp with pexp_attributes = binding.pvb_attributes }
     ) bindings vars origbody 
@@ -132,7 +132,7 @@ let rec is_linpat {ppat_desc;ppat_loc} =
     | Ppat_variant (_,_) | Ppat_record (_, _)
     | Ppat_array _ | Ppat_lazy _ -> false
   | Ppat_or (_,_) | Ppat_unpack _
-    | Ppat_exception _ | Ppat_extension _ ->
+    | Ppat_exception _ | Ppat_extension _ | Ppat_open _ ->
      error ppat_loc "%lin cannot handle this pattern"
   
 let lin_pattern oldpat =
@@ -142,17 +142,17 @@ let lin_pattern oldpat =
     let replace_linpat ({loc} as linvar) =
       let newvar = newname "match" in
       lin_vars := (linvar,newvar) :: !lin_vars;
-      pconstr ~loc "Linocaml.Lin_Internal__" [pvar ~loc newvar]
+      pconstr ~loc "Linocaml.Base.Lin_Internal__" [pvar ~loc newvar]
       
     and wrap_datapat ({ppat_loc} as pat) =
-      pconstr ~loc:ppat_loc "Linocaml.Data_Internal__" [pat]
+      pconstr ~loc:ppat_loc "Linocaml.Base.Data_Internal__" [pat]
     in
     let newpat = traverse wrap_datapat replace_linpat oldpat in
     let newpat =
       if is_linpat oldpat then
         newpat (* not to duplicate Lin pattern *)
       else
-        pconstr ~loc:ppat_loc "Linocaml.Lin_Internal__" [newpat]
+        pconstr ~loc:ppat_loc "Linocaml.Base.Lin_Internal__" [newpat]
     in
     newpat, List.rev !lin_vars
   in
@@ -182,16 +182,16 @@ let rec linval ({pexp_desc;pexp_loc;pexp_attributes} as outer) =
   | Pexp_variant (_,None) ->
      outer, []
     
-  | Pexp_apply ({pexp_desc=Pexp_ident {txt=Lident"!!"}} , [("",exp)]) ->
+  | Pexp_apply ({pexp_desc=Pexp_ident {txt=Lident"!!"}} , [(Nolabel,exp)]) ->
      let newvar = newname "linval" in
-     constr ~loc:pexp_loc "Linocaml.Lin_Internal__" [longident ~loc:pexp_loc newvar], [(newvar,exp)]
+     constr ~loc:pexp_loc "Linocaml.Base.Lin_Internal__" [longident ~loc:pexp_loc newvar], [(newvar,exp)]
      
   | Pexp_tuple (exprs) ->
     let exprs, bindings = List.split (List.map linval exprs) in
     {pexp_desc=Pexp_tuple(exprs);pexp_loc;pexp_attributes}, List.concat bindings
 
   | Pexp_construct ({txt=Lident "Data"},Some(expr)) ->
-     constr ~loc:pexp_loc ~attrs:pexp_attributes "Linocaml.Data_Internal__" [expr], []
+     constr ~loc:pexp_loc ~attrs:pexp_attributes "Linocaml.Base.Data_Internal__" [expr], []
        
   | Pexp_construct (lid,Some(expr)) ->
      let expr, binding = linval expr in
@@ -273,6 +273,7 @@ let rec linval ({pexp_desc;pexp_loc;pexp_attributes} as outer) =
   | Pexp_send (_,_) | Pexp_new _ | Pexp_setinstvar (_,_) | Pexp_override _
   | Pexp_letmodule (_,_,_) | Pexp_assert _ | Pexp_newtype (_,_)
   | Pexp_pack _ | Pexp_extension _
+  | Pexp_unreachable | Pexp_letexception _
     -> failwith "%linval can only contain values"
   
 let expression_mapper id mapper exp attrs =
@@ -332,17 +333,17 @@ let expression_mapper id mapper exp attrs =
      let cases = List.map lin_match cases in
      Some (app (mkbindfun ()) [process_inner {pexp_desc=Pexp_function(cases); pexp_loc; pexp_attributes}])
      
-  | "lin", Pexp_fun("",None,pat,expr) ->
+  | "lin", Pexp_fun(Nolabel,None,pat,expr) ->
      let newpat, inserts = lin_pattern pat in
      let newexpr = add_setslots inserts expr in
-     Some (app (mkbindfun ()) [process_inner {pexp_desc=Pexp_fun("",None,newpat,newexpr); pexp_loc; pexp_attributes}])
+     Some (app (mkbindfun ()) [process_inner {pexp_desc=Pexp_fun(Nolabel,None,newpat,newexpr); pexp_loc; pexp_attributes}])
      
   | "lin", _ ->
      error pexp_loc "Invalid content for extension %lin; it must be \"let%lin slotname = ..\" OR \"match%lin slotname with ..\""
 
   | "linret", expr ->
      let new_exp,bindings = linval {pexp_desc=expr;pexp_loc;pexp_attributes} in
-     let new_exp = constr ~loc:pexp_loc "Linocaml.Lin_Internal__" [new_exp] in
+     let new_exp = constr ~loc:pexp_loc "Linocaml.Base.Lin_Internal__" [new_exp] in
      let new_exp = app (monad_return ()) [new_exp] in
      let new_exp = add_getslots bindings new_exp in
      Some(new_exp)
@@ -361,19 +362,19 @@ let runner ({ ptype_loc = loc } as type_decl) =
          pcf_loc = Location.none;
          pcf_attributes = []}
       in
-      constr "Linocaml.Lin_Internal__" [Exp.object_ {pcstr_self = Pat.any (); pcstr_fields = List.map meth labels}]
+      constr "Linocaml.Base.Lin_Internal__" [Exp.object_ {pcstr_self = Pat.any (); pcstr_fields = List.map meth labels}]
     in
     let objtyp =
-      let methtyp (fname,_,_) = (fname,[],tconstr "Linocaml.empty" [])
+      let methtyp (fname,_,_) = (fname,[],tconstr "Linocaml.Base.empty" [])
       in
-      tconstr "Linocaml.lin" [Typ.object_ (List.map methtyp labels) Closed]
+      tconstr "Linocaml.Base.lin" [Typ.object_ (List.map methtyp labels) Closed]
     in
     let mkfun = Exp.fun_ Label.nolabel None in
     let runner = mkfun (pvar "x") (mkfun (pconstr "()" []) ((app (runmonad ()) [app (evar "x") [constr "()" []]; obj])))
     and linval = disposeenv () in
     let quoter = Ppx_deriving.create_quoter () in
-    let runnertyp = Typ.arrow "" (Typ.arrow "" (tconstr "unit" []) (tconstr "monad" [objtyp; objtyp; Typ.any ()])) (Typ.any ())
-    and linvaltyp = Typ.arrow "" (tconstr "monad" [Typ.any (); objtyp; Typ.any ()]) (Typ.any ()) in
+    let runnertyp = Typ.arrow Nolabel (Typ.arrow Nolabel (tconstr "unit" []) (tconstr "monad" [objtyp; objtyp; Typ.any ()])) (Typ.any ())
+    and linvaltyp = Typ.arrow Nolabel (tconstr "monad" [Typ.any (); objtyp; Typ.any ()]) (Typ.any ()) in
     let runner = {pstr_desc = Pstr_value (Nonrecursive, [Vb.mk (Pat.constraint_ (pvar ("run_" ^ name)) runnertyp) (Ppx_deriving.sanitize ~quoter runner)]); pstr_loc = Location.none}
     and linval = {pstr_desc = Pstr_value (Nonrecursive, [Vb.mk (Pat.constraint_ (pvar ("linval_"^name)) linvaltyp) (Ppx_deriving.sanitize ~quoter linval)]); pstr_loc = Location.none}
     in
@@ -397,11 +398,11 @@ let mapper_fun _ =
      let e1 = expr mapper e1
      and e2 = expr mapper e2 in
      (* brain-dead specialization of Lens.compose. problematic in various aspects: name capture, duplicated code, ... *)
-     [%expr let open Lens in {get=(fun out1__ -> [%e e1].get ([%e e2].get out1__)); put=(fun out1__ b__ -> [%e e2].put out1__ ([%e e1].put ([%e e2].get out1__) b__))}]
+     [%expr let open Linocaml.Lens in {get=(fun out1__ -> [%e e1].get ([%e e2].get out1__)); put=(fun out1__ b__ -> [%e e2].put out1__ ([%e e1].put ([%e e2].get out1__) b__))}]
   | _ -> default_mapper.expr mapper outer
   and stritem mapper outer =
     match outer with
-    | {pstr_desc = Pstr_type type_decls} ->
+    | {pstr_desc = Pstr_type (_,type_decls)} ->
        let runners =
          List.map (fun type_decl ->
            if has_runner type_decl.ptype_attributes then

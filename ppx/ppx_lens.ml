@@ -8,8 +8,8 @@ open Ast_convenience
 let deriver = "lens"
 let raise_errorf = Ppx_deriving.raise_errorf
 
-let getterfield () = "Lens.get"
-let setterfield () = "Lens.put"
+let getterfield () = "Linocaml.Lens.get"
+let setterfield () = "Linocaml.Lens.put"
 
                  
 let parse_options options =
@@ -78,7 +78,7 @@ let lens_typ rtyp ftyp =
   let vars = free_tvars getter_typ in
   let mapping, setter_2ndarg = change_tvars vars ftyp in
   let setter_result = rename_tvars mapping rtyp in
-  Typ.constr (lid "Lens.t") [ftyp; setter_2ndarg; Typ.constr (lid "Linocaml.lin") [rtyp]; Typ.constr (lid "Linocaml.lin") [setter_result]]
+  Typ.constr (lid "Linocaml.Lens.t") [ftyp; setter_2ndarg; Typ.constr (lid "Linocaml.Base.lin") [rtyp]; Typ.constr (lid "Linocaml.Base.lin") [setter_result]]
 
 let object_update obj labels fields =
   let meth (fname,_,_) =
@@ -105,9 +105,9 @@ let str_of_type ~options ~path ({ ptype_loc = loc } as type_decl) =
     let mkfun = Exp.fun_ Label.nolabel None in
     let varname = Ppx_deriving.mangle_type_decl (`Prefix deriver) type_decl in
     let getter field =
-      mkfun (pconstr "Linocaml.Lin_Internal__" [pvar varname]) (Exp.field (evar varname) (lid field))
+      mkfun (pconstr "Linocaml.Base.Lin_Internal__" [pvar varname]) (Exp.field (evar varname) (lid field))
     and setter field = 
-      mkfun (pconstr "Linocaml.Lin_Internal__" [pvar varname]) (mkfun (pvar field) (constr "Linocaml.Lin_Internal__" [record ~over:(evar varname) [(field, (evar field))]]))
+      mkfun (pconstr "Linocaml.Base.Lin_Internal__" [pvar varname]) (mkfun (pvar field) (constr "Linocaml.Base.Lin_Internal__" [record ~over:(evar varname) [(field, (evar field))]]))
     in
     let typ = Ppx_deriving.core_type_of_type_decl type_decl in
     let lens { pld_name = { txt = name }; pld_type } =
@@ -119,9 +119,9 @@ let str_of_type ~options ~path ({ ptype_loc = loc } as type_decl) =
     let typename = Ppx_deriving.mangle_type_decl (`Prefix deriver) type_decl in
     let fn = Exp.fun_ Label.nolabel None in
     let getter field =
-      fn (pconstr "Linocaml.Lin_Internal__" [pvar typename]) (Exp.send (evar typename) field)
+      fn (pconstr "Linocaml.Base.Lin_Internal__" [pvar typename]) (Exp.send (evar typename) field)
     and setter field = 
-      fn (pconstr "Linocaml.Lin_Internal__" [pvar typename]) (fn (pvar field) (constr "Linocaml.Lin_Internal__" [object_update (evar typename) labels [(field, (evar field))]]))
+      fn (pconstr "Linocaml.Base.Lin_Internal__" [pvar typename]) (fn (pvar field) (constr "Linocaml.Base.Lin_Internal__" [object_update (evar typename) labels [(field, (evar field))]]))
     in
     let lens (field,_,ftyp) =
       Vb.mk (Pat.constraint_ (pvar field) (lens_typ typ ftyp))

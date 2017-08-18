@@ -2,10 +2,12 @@ B +threads
 PKG threads unix compiler-libs.common ppx_tools ppx_tools.metaquot ppx_deriving oUnit lwt
 
 S lib
+S lwt
 S ppx
 S test
 
 B _build/lib
+B _build/lwt
 B _build/ppx
 B _build/test
 

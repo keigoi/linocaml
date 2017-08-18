@@ -1,8 +1,7 @@
 # OASIS_START
-# DO NOT EDIT (digest: e555798d703a69caa8bb98fc399f606a)
+# DO NOT EDIT (digest: 5df0550797721b5e837aa78e8c348630)
 version = "0.1"
 description = "A library with some ppx"
-requires = "lwt lwt.unix"
 archive(byte) = "linocaml.cma"
 archive(byte, plugin) = "linocaml.cma"
 archive(native) = "linocaml.cmxa"
@@ -30,6 +29,17 @@ package "ppx" (
  archive(syntax, preprocessor, native, plugin) = "ppx.cmxs"
  ppx = "ppx_linocaml"
  exists_if = "ppx.cma"
+)
+
+package "lwt" (
+ version = "0.1"
+ description = "A library with some ppx"
+ requires = "linocaml lwt lwt.unix"
+ archive(byte) = "linocaml_lwt.cma"
+ archive(byte, plugin) = "linocaml_lwt.cma"
+ archive(native) = "linocaml_lwt.cmxa"
+ archive(native, plugin) = "linocaml_lwt.cmxs"
+ exists_if = "linocaml_lwt.cma"
 )
 # OASIS_STOP
 

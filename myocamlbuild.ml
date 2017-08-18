@@ -1,5 +1,5 @@
 (* OASIS_START *)
-(* DO NOT EDIT (digest: 7e5c819dcd5b51eef50679965e48e87c) *)
+(* DO NOT EDIT (digest: 7532ac43c8eb642fc159ad60d67df4c8) *)
 module OASISGettext = struct
 (* # 22 "src/oasis/OASISGettext.ml" *)
 
@@ -882,12 +882,13 @@ let package_default =
      MyOCamlbuildBase.lib_ocaml =
        [
           ("linocaml", ["lib"], []);
+          ("linocaml_lwt", ["lwt"], []);
           ("ppx", ["ppx"], []);
           ("ppx_lens", ["ppx"], [])
        ];
      lib_c = [];
      flags = [];
-     includes = []
+     includes = [("lwt", ["lib"])]
   }
   ;;
 
@@ -895,6 +896,6 @@ let conf = {MyOCamlbuildFindlib.no_automatic_syntax = false}
 
 let dispatch_default = MyOCamlbuildBase.dispatch_default conf package_default;;
 
-# 899 "myocamlbuild.ml"
+# 900 "myocamlbuild.ml"
 (* OASIS_STOP *)
 Ocamlbuild_plugin.dispatch dispatch_default;;

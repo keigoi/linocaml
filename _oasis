@@ -6,18 +6,32 @@ Synopsis:    A library with some ppx
 Authors:     Keigo Imai
 License:     Apache
 Plugins:     META (0.4), DevFiles (0.4)
+BuildTools: ocamlbuild
 
 Library linocaml
-  Path:       lib
-  BuildTools: ocamlbuild
+  Path: lib
+  Findlibname: linocaml
+  Pack: true
   Modules:
-    Lens, Linocaml_base, S, Io_lwt, Io_std, Linocaml
+    Lens, Base, Direct
+
+Flag lwt
+  Description: build the Lwt submodule
+  Default: true
+
+Library linocaml_lwt
+  Build$:        flag(lwt)
+  Install$:      flag(lwt)
+  Path: lwt
+  Findlibname: lwt
+  Findlibparent: linocaml
+  Modules:
+    Linocaml_lwt
   BuildDepends:
-    lwt, lwt.unix
+    linocaml, lwt, lwt.unix
 
 Library ppx
   Path: ppx
-  BuildTools: ocamlbuild
   Modules: Ppx_linocaml
   FindlibName: ppx
   FindlibParent: linocaml
@@ -28,7 +42,6 @@ Library ppx
 
 Library ppx_lens
   Path: ppx
-  BuildTools: ocamlbuild
   Modules: Ppx_lens
   FindlibName: ppx_lens
   FindlibParent: linocaml
@@ -39,7 +52,6 @@ Library ppx_lens
 
 Executable ppx_linocaml
   Path: ppx
-  BuildTools: ocamlbuild
   MainIs: ppx_linocaml_ex.ml
   BuildDepends: compiler-libs.common, ppx_tools.metaquot, ppx_deriving.api
   CompiledObject: best

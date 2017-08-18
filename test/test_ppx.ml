@@ -1,7 +1,6 @@
 let (!%) = Printf.sprintf
 
-open Linocaml
-open Linocaml.Std
+open Linocaml.Direct
 
 type 't plist = ([`Cons of 't data * 'a lin | `Nil] as 'a) lin
                
