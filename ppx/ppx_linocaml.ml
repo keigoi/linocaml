@@ -325,7 +325,7 @@ let runner ({ ptype_loc = loc } as type_decl) =
     let obj =
       let meth (fname,_,_) =
         {pcf_desc =
-           Pcf_method ({txt=fname;loc=Location.none},
+           Pcf_method (fname,
                        Public,
                        Cfk_concrete(Fresh, emptyslot ()));
          pcf_loc = Location.none;

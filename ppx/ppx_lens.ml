@@ -89,7 +89,7 @@ let object_update obj labels fields =
         Exp.send obj fname
     in        
     {pcf_desc =
-       Pcf_method ({txt=fname;loc=Location.none},
+       Pcf_method (fname,
                    Public,
                    Cfk_concrete(Fresh,expr));
      pcf_loc = Location.none;
@@ -121,10 +121,10 @@ let str_of_type ~options ~path ({ ptype_loc = loc } as type_decl) =
     let getter field =
       fn (pconstr "Linocaml.Base.Lin_Internal__" [pvar typename]) (Exp.send (evar typename) field)
     and setter field = 
-      fn (pconstr "Linocaml.Base.Lin_Internal__" [pvar typename]) (fn (pvar field) (constr "Linocaml.Base.Lin_Internal__" [object_update (evar typename) labels [(field, (evar field))]]))
+      fn (pconstr "Linocaml.Base.Lin_Internal__" [pvar typename]) (fn (pvar field.txt) (constr "Linocaml.Base.Lin_Internal__" [object_update (evar typename) labels [(field, (evar field.txt))]]))
     in
     let lens (field,_,ftyp) =
-      Vb.mk (Pat.constraint_ (pvar field) (lens_typ typ ftyp))
+      Vb.mk (Pat.constraint_ (pvar field.txt) (lens_typ typ ftyp))
             (Ppx_deriving.sanitize ~quoter (record [(getterfield (),getter field); (setterfield (),setter field)]))
     in
     List.map lens labels
@@ -141,7 +141,7 @@ let sig_of_type ~options ~path ({ ptype_loc = loc } as type_decl) =
     List.map lens labels
   | {ptype_manifest = Some ({ptyp_desc = Ptyp_object (labels, Closed)} as typ)} ->
     let lens (field,_,ftyp) =
-      Sig.value (Val.mk (mknoloc field) (lens_typ typ ftyp))
+      Sig.value (Val.mk field (lens_typ typ ftyp))
     in
     List.map lens labels
   | _ -> raise_errorf ~loc "%s can only be derived for record types" deriver
