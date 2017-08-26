@@ -1,7 +1,6 @@
 (* Example: linearly-typed lists *)
-
-open Linocaml
-open Linocaml.Std
+open Linocaml.Base
+open Linocaml.Direct
 
 (* declaring slots *)
 type ('a,'b,'c) ctx = <s:'a; t:'b; u:'c>
@@ -33,7 +32,7 @@ type 'a linlist_ = Cons of 'a data * 'a linlist | Nil
 
 (* iterating over a list in slot "s"  *)
 let rec iter f =
-  get s >>>== function%lin
+  get s >>= function%lin
   | Cons(x, #s) -> f x >> iter f
   | Nil -> return ()
 
@@ -50,8 +49,9 @@ let rev_map f =
   let rec loop () =
     match%lin get s with
     | Cons(x, #s) ->
-       put t [%linret Cons(Data (f x), !!t)] >>=
-       loop
+       put t [%linret Cons(Data (f x), !!t)] >>
+       (* put t (Syntax.Internal.__takeval t >>= Syntax.Internal.__mkbindfun (fun x -> )) *)
+       loop ()
     | Nil -> return ()
   in
   (* accumulator *)
@@ -108,7 +108,7 @@ module O = struct
   [@@deriving lens][@@runner]
 end
 
-let root = {Lens.get=(fun x -> x); Lens.put=(fun _ x -> x)}
+let root = {Linocaml.Lens.get=(fun x -> x); put=(fun _ x -> x)}
 
 
 (* with less slot parameters, by using "temporary environment" *)
@@ -118,12 +118,12 @@ let rec map f s1 s2 =
     | Cons(x, #O.tmp) ->
        put O.tmp (loop ()) >>
        [%linret Cons(Data (f x), !! O.tmp)]
-    | Nil -> linret Nil
+    | Nil -> return Nil
   in
   let s1' = s1 ##. O.outer
   and s2' = s2 ##. O.outer
   in
-  put root [%linret object method tmp=Empty method outer= !!root end] >>
+  put root [%linret object method tmp=Linocaml.Base.Empty method outer= !!root end] >>
   put O.tmp (get s1') >>
   put s2' (loop ()) >>
   put root (O.linval_t (get O.outer))
@@ -136,7 +136,7 @@ let iter f s =
     | Cons(x, #O.tmp) -> f x; loop ()
     | Nil -> return ()
   in
-  put root [%linret object method tmp=Empty method outer= !!root end] >>
+  put root [%linret object method tmp=Linocaml.Base.Empty method outer= !!root end] >>
   put O.tmp (get s') >>
   loop () >>
   put root (O.linval_t (get O.outer))
@@ -144,6 +144,7 @@ let iter f s =
   
 (* again play wth them *)
 let () =
+(* let () = *)
   let f () =
     make [1;2;3] >>
     map (fun x -> x+1) s s >>
@@ -161,15 +162,16 @@ let map f s =
       | Cons(x, #O.tmp) ->
          put O.tmp (loop ()) >>
          [%linret Cons(Data (f x), !! O.tmp)]
-      | Nil -> linret Nil
+      | Nil -> return Nil
     in
-    put root [%linret object method tmp=Empty method outer= !!root end] >>
+    put root [%linret object method tmp=Linocaml.Base.Empty method outer= !!root end] >>
     put O.tmp (get s') >>
     put O.tmp (loop ()) >>
     lin_split @@ put root (O.linval_t [%linret (!! O.outer, !! O.tmp) ])
   
 (* again play wth them *)
 let () =
+(* let () = *)
   let f () =
     make [100;200;300] >>
     put s (map (fun x -> x*2) s) >>
@@ -181,7 +183,7 @@ let () =
 let f () =
   let s = s ##. O.outer
   in
-  put root [%linret object method tmp=Empty method outer= !!root end] >>
+  put root [%linret object method tmp=Linocaml.Base.Empty method outer= !!root end] >>
   let%lin `A(#O.tmp) = get s in
   put s (get O.tmp) >>
   put root (O.linval_t (get O.outer))

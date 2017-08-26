@@ -17,26 +17,26 @@ let root_module = ref "Syntax"
 
 let longident ?loc str = evar ?loc str
 
-let monad_bind () =
+let monad2_bind () =
   longident (!root_module ^ ".bind")
-
-let monad_linbind () =
-  longident (!root_module ^ ".linbind")
-
-let monad_return () =
-  longident (!root_module ^ ".return")
-  
-let setfunc () =
-  longident (!root_module ^ ".putval")
 
 let emptyslot () =
   longident (!root_module ^ ".empty")
 
 let mkbindfun () =
   longident (!root_module ^ ".Internal.__mkbindfun")
+
+let monad_bind_raw () =
+  longident (!root_module ^ ".Internal.__bind_raw")
+
+let monad_return_raw () =
+  longident (!root_module ^ ".Internal.__return_raw")
+  
+let setfunc_raw () =
+  longident (!root_module ^ ".Internal.__putval_raw")
   
 let getfunc () =
-  longident (!root_module ^ ".Internal.__takeval")
+  longident (!root_module ^ ".Internal.__takeval_raw")
   
 let runmonad () =
   longident (!root_module ^ ".Internal.__run")
@@ -102,25 +102,6 @@ let rec traverse f(*var wrapper*) g(*#tconst wrapper*) ({ppat_desc} as patouter)
   | Ppat_exception _ | Ppat_extension _ | Ppat_open _ ->
        error patouter.ppat_loc "%lin cannot handle this pattern"
 
-(* [_ = e0; _ = e1; ..] ==> 
-   [dum$0 = e0; dum$1 = e1; ..], ["dum$0"; "dum$1"; ..] *)
-let replace_bindings bindings =
-  List.split @@
-    List.map (fun binding ->
-        let varname = newname "let" in
-        {binding with pvb_pat = pvar ~loc:binding.pvb_pat.ppat_loc varname}, varname
-      ) bindings
-
-(* [p0 = _; p1 = _; ..] ["dum$0"; "dum$1"; ..] body ==> 
-   bind dum$0 (fun p0 -> bind dum$1 (fun p1 -> .. -> body)) *)
-let make_bindbody bindings vars origbody =
-  List.fold_right2 (fun binding var exp ->
-      let name = evar ~loc:binding.pvb_expr.pexp_loc var in
-      let f = Exp.fun_ ~loc:binding.pvb_loc Nolabel None binding.pvb_pat exp in
-      let new_exp = app ~loc:exp.pexp_loc (monad_bind ()) [name; f] in
-      { new_exp with pexp_attributes = binding.pvb_attributes }
-    ) bindings vars origbody 
-
 let rec is_linpat {ppat_desc;ppat_loc} = 
   match ppat_desc with
   | Ppat_type _ -> true
@@ -156,24 +137,24 @@ let lin_pattern oldpat =
     in
     newpat, List.rev !lin_vars
   in
-  let insert_expr (linvar, newvar) =
-    app ~loc:oldpat.ppat_loc (setfunc ()) [Exp.ident ~loc:linvar.loc linvar; evar ~loc:linvar.loc newvar]
-  in
   let newpat,lin_vars = wrap oldpat in
-  newpat, List.map insert_expr lin_vars
+  newpat, lin_vars
 
 let add_setslots es expr =
+  let insert_expr (linvar, newvar) =
+    app (* ~loc:oldpat.ppat_loc *) (setfunc_raw ()) [Exp.ident ~loc:linvar.loc linvar; evar ~loc:linvar.loc newvar]
+  in
   List.fold_right (fun e expr ->
       app
-        (monad_linbind ())
-        [e; app (mkbindfun ()) [lam (punit ()) expr]]) es expr
+        (monad_bind_raw ())
+        [insert_expr e; lam (punit ()) expr]) es expr
 
 let add_getslots es expr =
-  List.fold_right (fun (v,e) expr ->
+  List.fold_right (fun (v,slot) expr ->
       app
-        (monad_linbind ())
-        [app (getfunc ()) [e];
-         app (mkbindfun ()) [lam (pvar v) expr]]) es expr
+        (monad_bind_raw ())
+        [app (getfunc ()) [slot];
+         lam (pvar v) expr]) es expr
 
 let rec linval ({pexp_desc;pexp_loc;pexp_attributes} as outer) =
   match pexp_desc with
@@ -283,16 +264,6 @@ let expression_mapper id mapper exp attrs =
   in
   match id, exp.pexp_desc with
 
-  (* monadic bind *)
-  (* let%s p = e1 in e2 ==> let dum$0 = e1 in Linocaml.Syntax.bind dum$0 e2 *)
-  | "w", Pexp_let (Nonrecursive, vbl, body) ->
-     let newvbl, vars = replace_bindings vbl in
-     let newbody = make_bindbody vbl vars body in
-     let new_exp = Exp.let_ ~loc:pexp_loc ~attrs:pexp_attributes Nonrecursive newvbl newbody
-     in
-     Some (process_inner new_exp)
-  | "w", _ -> error pexp_loc "Invalid content for extension %w; it must be used as let%w"
-
   | "lin", Pexp_let (Nonrecursive, vbls, expr) ->
      let lin_binding ({pvb_pat;pvb_expr} as vb) =
          let newpat, inserts = lin_pattern pvb_pat in
@@ -301,7 +272,7 @@ let expression_mapper id mapper exp attrs =
      let new_vbls, inserts = List.split (List.map lin_binding vbls) in
      let new_expr = add_setslots (List.concat inserts) expr in
      let make_bind {pvb_pat;pvb_expr;pvb_loc;pvb_attributes} expr =
-       app ~loc:pexp_loc (monad_linbind ()) [pvb_expr; app ~loc:pvb_loc (mkbindfun ()) [lam ~loc:pvb_loc pvb_pat expr]]
+       app ~loc:pexp_loc (monad2_bind ()) [pvb_expr; app ~loc:pvb_loc (mkbindfun ()) [lam ~loc:pvb_loc pvb_pat expr]]
      in
      let expression = List.fold_right make_bind new_vbls new_expr
      in
@@ -316,11 +287,9 @@ let expression_mapper id mapper exp attrs =
      let cases = List.map lin_match cases in
      let new_exp =
        app ~loc:pexp_loc ~attrs:pexp_attributes
-         (monad_linbind ())
+         (monad_bind_raw ())
          [matched;
-          app ~loc:pexp_loc
-              (mkbindfun ())
-              [Exp.function_ ~loc:pexp_loc cases]]
+          Exp.function_ ~loc:pexp_loc cases]
      in
      Some (process_inner new_exp)
 
@@ -344,7 +313,7 @@ let expression_mapper id mapper exp attrs =
   | "linret", expr ->
      let new_exp,bindings = linval {pexp_desc=expr;pexp_loc;pexp_attributes} in
      let new_exp = constr ~loc:pexp_loc "Linocaml.Base.Lin_Internal__" [new_exp] in
-     let new_exp = app (monad_return ()) [new_exp] in
+     let new_exp = app (monad_return_raw ()) [new_exp] in
      let new_exp = add_getslots bindings new_exp in
      Some(new_exp)
 
