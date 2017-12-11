@@ -16,7 +16,7 @@ module type LIN_IO = sig
   type 'f bind
 
   val return : 'a -> ('p,'p,'a lin) monad
-  val lift : 'a IO.io -> ('p,'p,'a data lin) monad
+  val lift : 'a IO.io -> ('p,'p,'a lin) monad
 
   (* extract a linval *)
   val bind : ('pre,'mid,'a lin) monad -> ('a lin -> ('mid,'post,'b lin) monad) bind -> ('pre,'post,'b lin) monad
@@ -65,7 +65,7 @@ struct
   type 'f bind = 'f
 
   let return a pre = M.return (pre, Lin_Internal__ a)
-  let lift m pre = IO.(>>=) m (fun x -> M.return (pre, (Lin_Internal__ (Data_Internal__ x))))
+  let lift m pre = IO.(>>=) m (fun x -> M.return (pre, (Lin_Internal__ x)))
 
   let bind f g pre = M.(>>=) (f pre) (fun (mid, a) -> g a mid)
   let (>>=) = bind
