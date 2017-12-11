@@ -1,5 +1,5 @@
 (* OASIS_START *)
-(* DO NOT EDIT (digest: 7532ac43c8eb642fc159ad60d67df4c8) *)
+(* DO NOT EDIT (digest: d04d30a97f26d774676272f7c09c9ae2) *)
 module OASISGettext = struct
 (* # 22 "src/oasis/OASISGettext.ml" *)
 
@@ -884,11 +884,12 @@ let package_default =
           ("linocaml", ["lib"], []);
           ("linocaml_lwt", ["lwt"], []);
           ("ppx", ["ppx"], []);
+          ("ppx_internal", ["ppx"], []);
           ("ppx_lens", ["ppx"], [])
        ];
      lib_c = [];
      flags = [];
-     includes = [("lwt", ["lib"])]
+     includes = [("lwt", ["lib"]); ("examples", ["lib"; "ppx"])]
   }
   ;;
 
@@ -896,6 +897,32 @@ let conf = {MyOCamlbuildFindlib.no_automatic_syntax = false}
 
 let dispatch_default = MyOCamlbuildBase.dispatch_default conf package_default;;
 
-# 900 "myocamlbuild.ml"
+# 901 "myocamlbuild.ml"
 (* OASIS_STOP *)
-Ocamlbuild_plugin.dispatch dispatch_default;;
+(* Ocamlbuild_plugin.dispatch dispatch_default;; *)
+
+open Ocamlbuild_plugin
+
+let native_suffix =
+  let env = BaseEnvLight.load () in
+  if BaseEnvLight.var_get "is_native" env = "true"
+  then "native" else "byte"
+
+let ppx_linocaml = "ppx/ppx_linocaml_ex."^native_suffix
+
+(* ppx_deriving *)
+let () =
+  dispatch (
+      MyOCamlbuildBase.dispatch_combine [
+          dispatch_default;
+          begin
+            function
+            | After_rules ->
+               flag
+                 ["ocaml"; "compile"; "use_ppx_linocaml"] &
+                 S[A"-ppxopt"; A"ppx_deriving,ppx/ppx_lens.cma"; A"-ppx"; A ppx_linocaml];
+               flag
+                 ["ocamldep"; "use_ppx_linocaml"] &
+                 S[A"-ppxopt"; A"ppx_deriving,ppx/ppx_lens.cma"; A"-ppx"; A ppx_linocaml];
+            | _ -> ()
+          end])

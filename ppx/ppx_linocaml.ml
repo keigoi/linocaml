@@ -1,8 +1,8 @@
 (* TODO: replace "failwith" with proper error-handling *)
 
 open Asttypes
-open Parsetree
 open Longident
+open Parsetree
 open Ast_helper
 open Ast_convenience
 
@@ -12,42 +12,59 @@ let newname =
     let i = !r in
     r := i + 1;
   Printf.sprintf "__ppx_linocaml_%s_%d" prefix i
-  
+
 let root_module = ref "Syntax"
 
 let longident ?loc str = evar ?loc str
 
-let monad2_bind () =
+let monad_bind () =
   longident (!root_module ^ ".bind")
 
 let emptyslot () =
   longident (!root_module ^ ".empty")
-
-let mkbindfun () =
-  longident (!root_module ^ ".Internal.__mkbindfun")
 
 let monad_bind_raw () =
   longident (!root_module ^ ".Internal.__bind_raw")
 
 let monad_return_raw () =
   longident (!root_module ^ ".Internal.__return_raw")
-  
-let setfunc_raw () =
+
+let mkbindfun () =
+  longident (!root_module ^ ".Internal.__mkbindfun")
+
+let putval_raw () =
   longident (!root_module ^ ".Internal.__putval_raw")
-  
-let getfunc () =
+
+let takeval_raw () =
   longident (!root_module ^ ".Internal.__takeval_raw")
-  
+
 let runmonad () =
   longident (!root_module ^ ".Internal.__run")
 
 let disposeenv () =
   longident (!root_module ^ ".Internal.__dispose_env")
-  
+
 let error loc (s:string) =
   Location.raise_errorf ~loc "%s" s
 
-let rec traverse f(*var wrapper*) g(*#tconst wrapper*) ({ppat_desc} as patouter) =
+
+let add_putval es expr =
+  let insert_expr (linvar, newvar) =
+    app (* ~loc:oldpat.ppat_loc *) (putval_raw ()) [Exp.ident ~loc:linvar.loc linvar; evar ~loc:linvar.loc newvar]
+  in
+  List.fold_right (fun e expr ->
+      app
+        (monad_bind_raw ())
+        [insert_expr e; lam (punit ()) expr]) es expr
+
+let add_takeval es expr =
+  List.fold_right (fun (v,slot) expr ->
+      app
+        (monad_bind_raw ())
+        [app (takeval_raw ()) [slot];
+         lam (pvar v) expr]) es expr
+
+let rec traverse_pats f(*var wrapper*) g(*#tconst wrapper*) ({ppat_desc} as patouter) =
   match ppat_desc with
   | Ppat_any -> f patouter
         (* _ *)
@@ -55,7 +72,7 @@ let rec traverse f(*var wrapper*) g(*#tconst wrapper*) ({ppat_desc} as patouter)
         (* x *)
   | Ppat_alias (pat,tvarloc) ->
      error tvarloc.loc "as-pattern is forbidden at %lin match" (* TODO relax this *)
-     (* {patouter with ppat_desc=Ppat_alias(traverse f g pat,tvarloc)} *)
+     (* {patouter with ppat_desc=Ppat_alias(traverse_pats f g pat,tvarloc)} *)
         (* P as 'a *)
   | Ppat_constant _ -> patouter
         (* 1, 'a', "true", 1.0, 1l, 1L, 1n *)
@@ -64,50 +81,50 @@ let rec traverse f(*var wrapper*) g(*#tconst wrapper*) ({ppat_desc} as patouter)
 
            Other forms of interval are recognized by the parser
            but rejected by the type-checker. *)
-  | Ppat_tuple pats -> {patouter with ppat_desc=Ppat_tuple(List.map (traverse f g) pats)}
+  | Ppat_tuple pats -> {patouter with ppat_desc=Ppat_tuple(List.map (traverse_pats f g) pats)}
         (* (P1, ..., Pn)
 
            Invariant: n >= 2
         *)
-  | Ppat_construct (lidloc,Some(pat)) -> {patouter with ppat_desc=Ppat_construct(lidloc,Some(traverse f g pat))}
+  | Ppat_construct (lidloc,Some(pat)) -> {patouter with ppat_desc=Ppat_construct(lidloc,Some(traverse_pats f g pat))}
   | Ppat_construct (_,None) -> patouter
         (* C                None
            C P              Some P
            C (P1, ..., Pn)  Some (Ppat_tuple [P1; ...; Pn])
          *)
-  | Ppat_variant (lab,Some(pat)) -> {patouter with ppat_desc=Ppat_variant(lab,Some(traverse f g pat))}
+  | Ppat_variant (lab,Some(pat)) -> {patouter with ppat_desc=Ppat_variant(lab,Some(traverse_pats f g pat))}
   | Ppat_variant (lab,None) -> patouter
         (* `A             (None)
            `A P           (Some P)
          *)
   | Ppat_record (recpats, Closed) ->
      {patouter with
-       ppat_desc=Ppat_record(List.map (fun (field,pat) -> (field,traverse f g pat)) recpats, Closed)
+       ppat_desc=Ppat_record(List.map (fun (field,pat) -> (field,traverse_pats f g pat)) recpats, Closed)
      }
         (* { l1=P1; ...; ln=Pn }     (flag = Closed)
            { l1=P1; ...; ln=Pn; _}   (flag = Open)
 
            Invariant: n > 0
          *)
-  | Ppat_array pats -> {patouter with ppat_desc=Ppat_array (List.map (traverse f g) pats)}
+  | Ppat_array pats -> {patouter with ppat_desc=Ppat_array (List.map (traverse_pats f g) pats)}
         (* [| P1; ...; Pn |] *)
-  | Ppat_constraint (pat,typ)  -> {patouter with ppat_desc=Ppat_constraint(traverse f g pat,typ)}
+  | Ppat_constraint (pat,typ)  -> {patouter with ppat_desc=Ppat_constraint(traverse_pats f g pat,typ)}
         (* (P : T) *)
   | Ppat_type lidloc -> g lidloc
         (* #tconst *)
-  | Ppat_lazy pat -> {patouter with ppat_desc=Ppat_lazy(traverse f g pat)}
-                   
+  | Ppat_lazy pat -> {patouter with ppat_desc=Ppat_lazy(traverse_pats f g pat)}
+
   | Ppat_record (_, Open)
   | Ppat_or (_,_) | Ppat_unpack _
   | Ppat_exception _ | Ppat_extension _ | Ppat_open _ ->
        error patouter.ppat_loc "%lin cannot handle this pattern"
 
-let rec is_linpat {ppat_desc;ppat_loc} = 
+let rec is_linpat {ppat_desc;ppat_loc} =
   match ppat_desc with
   | Ppat_type _ -> true
   | Ppat_alias (pat,_) -> is_linpat pat
   | Ppat_constraint (pat,_)  -> is_linpat pat
-  | Ppat_any | Ppat_var _ 
+  | Ppat_any | Ppat_var _
     | Ppat_constant _ | Ppat_interval (_,_)
     | Ppat_tuple _ | Ppat_construct (_,_)
     | Ppat_variant (_,_) | Ppat_record (_, _)
@@ -115,8 +132,9 @@ let rec is_linpat {ppat_desc;ppat_loc} =
   | Ppat_or (_,_) | Ppat_unpack _
     | Ppat_exception _ | Ppat_extension _ | Ppat_open _ ->
      error ppat_loc "%lin cannot handle this pattern"
-  
-let lin_pattern oldpat =
+
+(* (#p, #q, x) ==> (__tmp1, __tmp2, x), [(#p, "__tmp1"), (#q, "__tmp2")] *)
+let lin_pattern oldpat : pattern * (Longident.t Location.loc * string) list=
   let wrap ({ppat_loc} as oldpat) =
     let lin_vars = ref []
     in
@@ -124,11 +142,11 @@ let lin_pattern oldpat =
       let newvar = newname "match" in
       lin_vars := (linvar,newvar) :: !lin_vars;
       pconstr ~loc "Linocaml.Base.Lin_Internal__" [pvar ~loc newvar]
-      
+
     and wrap_datapat ({ppat_loc} as pat) =
       pconstr ~loc:ppat_loc "Linocaml.Base.Data_Internal__" [pat]
     in
-    let newpat = traverse wrap_datapat replace_linpat oldpat in
+    let newpat = traverse_pats wrap_datapat replace_linpat oldpat in
     let newpat =
       if is_linpat oldpat then
         newpat (* not to duplicate Lin pattern *)
@@ -140,40 +158,28 @@ let lin_pattern oldpat =
   let newpat,lin_vars = wrap oldpat in
   newpat, lin_vars
 
-let add_setslots es expr =
-  let insert_expr (linvar, newvar) =
-    app (* ~loc:oldpat.ppat_loc *) (setfunc_raw ()) [Exp.ident ~loc:linvar.loc linvar; evar ~loc:linvar.loc newvar]
-  in
-  List.fold_right (fun e expr ->
-      app
-        (monad_bind_raw ())
-        [insert_expr e; lam (punit ()) expr]) es expr
-
-let add_getslots es expr =
-  List.fold_right (fun (v,slot) expr ->
-      app
-        (monad_bind_raw ())
-        [app (getfunc ()) [slot];
-         lam (pvar v) expr]) es expr
+let make_lin_match_case ({pc_lhs=pat;pc_rhs=expr} as case) =
+  let newpat, linvars = lin_pattern pat in
+  {case with pc_lhs=newpat; pc_rhs=add_putval linvars expr}
 
 let rec linval ({pexp_desc;pexp_loc;pexp_attributes} as outer) =
   match pexp_desc with
-  | Pexp_ident _ | Pexp_constant _ 
-  | Pexp_construct (_,None) 
+  | Pexp_ident _ | Pexp_constant _
+  | Pexp_construct (_,None)
   | Pexp_variant (_,None) ->
      outer, []
-    
+
   | Pexp_apply ({pexp_desc=Pexp_ident {txt=Lident"!!"}} , [(Nolabel,exp)]) ->
      let newvar = newname "linval" in
      constr ~loc:pexp_loc "Linocaml.Base.Lin_Internal__" [longident ~loc:pexp_loc newvar], [(newvar,exp)]
-     
+
   | Pexp_tuple (exprs) ->
     let exprs, bindings = List.split (List.map linval exprs) in
     {pexp_desc=Pexp_tuple(exprs);pexp_loc;pexp_attributes}, List.concat bindings
 
   | Pexp_construct ({txt=Lident "Data"},Some(expr)) ->
      constr ~loc:pexp_loc ~attrs:pexp_attributes "Linocaml.Base.Data_Internal__" [expr], []
-       
+
   | Pexp_construct (lid,Some(expr)) ->
      let expr, binding = linval expr in
      {pexp_desc=Pexp_construct(lid,Some(expr));pexp_loc;pexp_attributes}, binding
@@ -256,7 +262,7 @@ let rec linval ({pexp_desc;pexp_loc;pexp_attributes} as outer) =
   | Pexp_pack _ | Pexp_extension _
   | Pexp_unreachable | Pexp_letexception _
     -> failwith "%linval can only contain values"
-  
+
 let expression_mapper id mapper exp attrs =
   let pexp_attributes = exp.pexp_attributes @ attrs in
   let pexp_loc=exp.pexp_loc in
@@ -265,56 +271,57 @@ let expression_mapper id mapper exp attrs =
   match id, exp.pexp_desc with
 
   | "lin", Pexp_let (Nonrecursive, vbls, expr) ->
-     let lin_binding ({pvb_pat;pvb_expr} as vb) =
-         let newpat, inserts = lin_pattern pvb_pat in
-         {vb with pvb_pat=newpat}, inserts
+     let lin_binding ({pvb_pat} as vb) =
+         let newpat, linvars = lin_pattern pvb_pat in
+         {vb with pvb_pat=newpat}, linvars
      in
-     let new_vbls, inserts = List.split (List.map lin_binding vbls) in
-     let new_expr = add_setslots (List.concat inserts) expr in
+     let new_vbls, linvars = List.split (List.map lin_binding vbls) in
+     let new_expr = add_putval (List.concat linvars) expr in
      let make_bind {pvb_pat;pvb_expr;pvb_loc;pvb_attributes} expr =
-       app ~loc:pexp_loc (monad2_bind ()) [pvb_expr; app ~loc:pvb_loc (mkbindfun ()) [lam ~loc:pvb_loc pvb_pat expr]]
+       app ~loc:pexp_loc ~attrs:pexp_attributes
+           (monad_bind ())
+           [pvb_expr; app ~loc:pvb_loc (mkbindfun ()) [lam ~loc:pvb_loc pvb_pat expr]]
      in
-     let expression = List.fold_right make_bind new_vbls new_expr
+     let new_expr = List.fold_right make_bind new_vbls new_expr
      in
-     Some (process_inner expression)
+     Some (process_inner new_expr)
 
   | "lin", Pexp_match(matched, cases) ->
-     let lin_match ({pc_lhs=pat;pc_rhs=expr} as case) =
-       let newpat, inserts = lin_pattern pat in
-       let newexpr = add_setslots inserts expr in
-       {case with pc_lhs=newpat;pc_rhs=newexpr}
-     in
-     let cases = List.map lin_match cases in
-     let new_exp =
+     let new_cases = List.map make_lin_match_case cases in
+     let new_expr =
        app ~loc:pexp_loc ~attrs:pexp_attributes
          (monad_bind_raw ())
-         [matched;
-          Exp.function_ ~loc:pexp_loc cases]
+         [matched; Exp.function_ ~loc:pexp_loc new_cases]
      in
-     Some (process_inner new_exp)
+     Some (process_inner new_expr)
 
   | "lin", Pexp_function(cases) ->
-     let lin_match ({pc_lhs=pat;pc_rhs=expr} as case) =
-       let newpat, inserts = lin_pattern pat in
-       let newexpr = add_setslots inserts expr in
-       {case with pc_lhs=newpat;pc_rhs=newexpr}
+     let cases = List.map make_lin_match_case cases in
+     let new_expr =
+       app ~loc:pexp_loc ~attrs:pexp_attributes
+         (mkbindfun ())
+         [{pexp_desc=Pexp_function(cases); pexp_loc; pexp_attributes}]
      in
-     let cases = List.map lin_match cases in
-     Some (app (mkbindfun ()) [process_inner {pexp_desc=Pexp_function(cases); pexp_loc; pexp_attributes}])
-     
+     Some (process_inner new_expr)
+
   | "lin", Pexp_fun(Nolabel,None,pat,expr) ->
-     let newpat, inserts = lin_pattern pat in
-     let newexpr = add_setslots inserts expr in
-     Some (app (mkbindfun ()) [process_inner {pexp_desc=Pexp_fun(Nolabel,None,newpat,newexpr); pexp_loc; pexp_attributes}])
-     
+     let newpat, linvars = lin_pattern pat in
+     let newexpr = add_putval linvars expr in
+     let new_expr =
+       app ~loc:pexp_loc ~attrs:pexp_attributes
+         (mkbindfun ())
+         [{pexp_desc=Pexp_fun(Nolabel,None,newpat,newexpr); pexp_loc; pexp_attributes}]
+     in
+     Some (process_inner new_expr)
+
   | "lin", _ ->
      error pexp_loc "Invalid content for extension %lin; it must be \"let%lin slotname = ..\" OR \"match%lin slotname with ..\""
 
   | "linret", expr ->
-     let new_exp,bindings = linval {pexp_desc=expr;pexp_loc;pexp_attributes} in
+     let new_exp, bindings = linval {pexp_desc=expr;pexp_loc;pexp_attributes} in
      let new_exp = constr ~loc:pexp_loc "Linocaml.Base.Lin_Internal__" [new_exp] in
      let new_exp = app (monad_return_raw ()) [new_exp] in
-     let new_exp = add_getslots bindings new_exp in
+     let new_exp = add_takeval bindings new_exp in
      Some(new_exp)
 
   | _ -> None

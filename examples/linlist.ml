@@ -11,7 +11,7 @@ Generated from [@@runner]:
 val run_ctx :
   (unit ->
    (< s : empty; t : empty; u : empty > lin,
-    < s : empty; t : empty; u : empty > lin, 'a) monad) 
+    < s : empty; t : empty; u : empty > lin, 'a) monad)
   -> unit -> 'a
 val linval_ctx :
   ('a, < s : empty; t : empty; u : empty > lin, 'b) monad ->
@@ -24,7 +24,7 @@ val t :
   ('b, 'bb, < s : 'a; t : 'b; u : 'c > lin, < s : 'a; t : 'bb; u : 'c > lin) slot
 val u :
   ('c, 'cc, < s : 'a; t : 'b; u : 'c > lin, < s : 'a; t : 'b; u : 'cc > lin) slot
-*)                      
+*)
 
 (* linearly typed list *)
 type 'a linlist_ = Cons of 'a data * 'a linlist | Nil
@@ -78,8 +78,8 @@ let () =
   in
   run_ctx f ()
 
-(* 
- * Currently, parameterising over slots would be a little cumbersome 
+(*
+ * Currently, parameterising over slots would be a little cumbersome
  *)
 let rec iter f s s1  =
   match%lin get s with
@@ -140,8 +140,8 @@ let iter f s =
   put O.tmp (get s') >>
   loop () >>
   put root (O.linval_t (get O.outer))
-           
-  
+
+
 (* again play wth them *)
 let () =
 (* let () = *)
@@ -168,7 +168,7 @@ let map f s =
     put O.tmp (get s') >>
     put O.tmp (loop ()) >>
     lin_split @@ put root (O.linval_t [%linret (!! O.outer, !! O.tmp) ])
-  
+
 (* again play wth them *)
 let () =
 (* let () = *)
@@ -179,7 +179,7 @@ let () =
     iter (fun x -> print_endline x; return ()) s
   in
   run_ctx f ()
-   
+
 let f () =
   let s = s ##. O.outer
   in

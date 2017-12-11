@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: e914b533aebb7c9821c3cffaa61bff43)
+# DO NOT EDIT (digest: 15986e623bfdbc458063ad662aa7c156)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -26,15 +26,30 @@ true: annot, bin_annot
 <lwt/*.ml{,i,y}>: use_linocaml
 # Library ppx
 "ppx/ppx.cmxs": use_ppx
+# Library ppx_internal
+"ppx/ppx_internal.cmxs": use_ppx_internal
+# Executable ppx_linocaml
+<ppx/ppx_linocaml_ex.{native,byte}>: pkg_compiler-libs
+<ppx/ppx_linocaml_ex.{native,byte}>: pkg_ppx_deriving.api
+<ppx/ppx_linocaml_ex.{native,byte}>: pkg_ppx_tools.metaquot
+<ppx/ppx_linocaml_ex.{native,byte}>: use_ppx_internal
+<ppx/*.ml{,i,y}>: pkg_ppx_deriving.api
+<ppx/*.ml{,i,y}>: pkg_ppx_tools.metaquot
+<ppx/*.ml{,i,y}>: use_ppx_internal
 # Library ppx_lens
 "ppx/ppx_lens.cmxs": use_ppx_lens
 <ppx/*.ml{,i,y}>: pkg_compiler-libs
 <ppx/*.ml{,i,y}>: pkg_ppx_deriving
-# Executable ppx_linocaml
-<ppx/ppx_linocaml_ex.{native,byte}>: pkg_compiler-libs.common
-<ppx/ppx_linocaml_ex.{native,byte}>: pkg_ppx_deriving.api
-<ppx/ppx_linocaml_ex.{native,byte}>: pkg_ppx_tools.metaquot
-<ppx/*.ml{,i,y}>: pkg_compiler-libs.common
-<ppx/*.ml{,i,y}>: pkg_ppx_deriving.api
-<ppx/*.ml{,i,y}>: pkg_ppx_tools.metaquot
+# Executable examples_linlist
+<examples/linlist.{native,byte}>: pkg_compiler-libs
+<examples/linlist.{native,byte}>: pkg_ppx_deriving
+<examples/linlist.{native,byte}>: use_linocaml
+<examples/linlist.{native,byte}>: use_ppx
+<examples/linlist.{native,byte}>: use_ppx_lens
+<examples/*.ml{,i,y}>: pkg_compiler-libs
+<examples/*.ml{,i,y}>: pkg_ppx_deriving
+<examples/*.ml{,i,y}>: use_linocaml
+<examples/*.ml{,i,y}>: use_ppx
+<examples/*.ml{,i,y}>: use_ppx_lens
 # OASIS_STOP
+<examples/*.ml>: use_ppx_linocaml
