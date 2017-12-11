@@ -13,15 +13,15 @@ end
 module type LIN_IO = sig
   module IO : IO
   type ('pre,'post,'a) monad
-  type ('a, 'pre,'post,'b) bindfun
+  type 'f bind
 
   val return : 'a -> ('p,'p,'a lin) monad
   val lift : 'a IO.io -> ('p,'p,'a data lin) monad
 
   (* extract a linval *)
-  val bind : ('pre,'mid,'a lin) monad -> ('a lin,'mid,'post,'b lin) bindfun -> ('pre,'post,'b lin) monad
+  val bind : ('pre,'mid,'a lin) monad -> ('a lin -> ('mid,'post,'b lin) monad) bind -> ('pre,'post,'b lin) monad
   val (>>) : ('pre,'mid,unit lin) monad -> ('mid,'post,'b lin) monad -> ('pre,'post,'b lin) monad
-  val (>>=) : ('pre,'mid,'a lin) monad -> ('a lin,'mid,'post,'b lin) bindfun -> ('pre,'post,'b lin) monad
+  val (>>=) : ('pre,'mid,'a lin) monad -> ('a lin -> ('mid,'post,'b lin) monad) bind -> ('pre,'post,'b lin) monad
 
   (* get a value from slot *)
   val get : ('a lin,empty,'pre,'post) slot -> ('pre,'post,'a lin) monad
@@ -39,14 +39,14 @@ module type LIN_IO = sig
   end
 
   module Syntax : sig
-    val bind : ('pre,'mid,'a) monad -> ('a, 'mid,'post,'b) bindfun -> ('pre,'post,'b) monad
+    val bind : ('pre,'mid,'a) monad -> ('a -> ('mid,'post,'b) monad) bind -> ('pre,'post,'b) monad
     val empty : empty
 
     module Internal : sig
       val __bind_raw : ('pre,'mid,'a) monad -> ('a -> ('mid,'post,'b) monad) -> ('pre,'post,'b) monad
       val __return_raw : 'a -> ('p,'p,'a) monad
 
-      val __mkbindfun : ('a -> ('pre,'post,'b) monad) -> ('a, 'pre, 'post, 'b) bindfun
+      val __mkbindfun : ('a -> ('pre,'post,'b) monad) -> ('a -> ('pre, 'post, 'b) monad) bind
 
       val __putval_raw : (empty,'a lin,'pre,'post) slot -> 'a -> ('pre,'post,unit) monad
       val __takeval_raw : ('a lin,empty,'pre,'post) slot -> ('pre,'post,'a) monad
@@ -62,7 +62,7 @@ struct
   module IO = M
 
   type ('pre,'post,'a) monad = 'pre -> ('post * 'a) M.io
-  type ('a,'pre,'post,'b) bindfun = 'a -> ('pre, 'post, 'b) monad
+  type 'f bind = 'f
 
   let return a pre = M.return (pre, Lin_Internal__ a)
   let lift m pre = IO.(>>=) m (fun x -> M.return (pre, (Lin_Internal__ (Data_Internal__ x))))

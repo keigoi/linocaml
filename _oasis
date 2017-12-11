@@ -41,7 +41,7 @@ Library ppx
   XMETARequires: linocaml, ppx_deriving
   XMETAExtraLines: ppx = "ppx_linocaml"
   Modules:
-    Ppx_linocaml_empty.ml
+    Ppx_linocaml_empty
 
 Library ppx_internal
   Path: ppx
