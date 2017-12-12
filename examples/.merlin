@@ -1,11 +1,10 @@
-B +threads
-PKG threads unix compiler-libs.common ppx_tools ppx_tools.metaquot ppx_deriving linocaml linocaml.ppx linocaml.ppx_lens oUnit
-FLG -short-paths
-
-S .
+B ../_build/default/examples
+B ../_build/default/lib
+FLG -ppx '/Users/keigoi/Documents/linocaml/_build/default/.ppx/linocaml.ppx+linocaml.ppx_lens/ppx.exe --as-ppx'
+FLG -w -40
+PKG compiler-libs
+PKG compiler-libs.common
+PKG ppx_deriving.runtime
+PKG ppx_stage.runtime-lib
+PKG result
 S ../lib
-
-B .
-
-# B ~/.opam/4.03.0/build/ounit.2.0.0/_build/src
-# S ~/.opam/4.03.0/build/ounit.2.0.0/_build/src

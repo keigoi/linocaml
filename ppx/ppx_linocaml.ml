@@ -1,10 +1,12 @@
 (* TODO: replace "failwith" with proper error-handling *)
+open Migrate_parsetree
+open Ast_405
 
 open Asttypes
 open Longident
 open Parsetree
 open Ast_helper
-open Ast_convenience
+open Ast_convenience_405
 
 let newname =
   let r = ref 0 in
@@ -359,7 +361,7 @@ let runner ({ ptype_loc = loc } as type_decl) =
 let has_runner attrs =
   List.exists (fun ({txt = name},_) -> name = "runner")  attrs
 
-let mapper_fun _ =
+let mapper_fun _ _ =
   let open Ast_mapper in
   let rec expr mapper outer =
   match outer with
@@ -391,4 +393,11 @@ let mapper_fun _ =
   in
   {default_mapper with expr; structure}
 
-let () = Ast_mapper.register "ppx_linocaml" mapper_fun
+let migration =
+  Versions.migrate Versions.ocaml_405 Versions.ocaml_current
+
+let () =
+  Driver.register
+    ~name:"ppx_linocaml"
+    Versions.ocaml_405
+    mapper_fun

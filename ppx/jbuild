@@ -4,6 +4,10 @@
  ((name ppx_linocaml)
   (public_name linocaml.ppx)
   (kind ppx_rewriter)
-  (ppx_runtime_libraries (linocaml))
-  (preprocess (pps (ppx_metaquot)))
-  (libraries (compiler-libs ppx_tools))))
+  (ppx_runtime_libraries (ppx_stage.runtime-lib))
+  (preprocess (pps (ppx_tools_versioned.metaquot_405)))
+  (libraries (ocaml-migrate-parsetree ppx_tools_versioned ppx_stage.runtime-lib))))
+
+  ;; (ppx_runtime_libraries (linocaml))
+  ;; (preprocess (pps (ppx_metaquot)))
+  ;; (libraries (compiler-libs ppx_tools))))
