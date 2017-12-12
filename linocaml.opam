@@ -1,0 +1,15 @@
+opam-version: "1.2"
+maintainer: "keigo.imai@gmail.com"
+authors: ["Keigo Imai"]
+homepage: "https://github.com/keigoi/linocaml"
+bug-reports: "https://github.com/keigoi/linocaml/issues"
+dev-repo: "https://github.com/keigoi/linocaml.git"
+license: "Apache"
+build:
+[[ "jbuilder" "build" "--only-packages" "%{name}%" "--root" "." "-j" jobs "@install" ]]
+available: [ ocaml-version >= "4.05" ]
+depends: [
+  "jbuilder" {build}
+  "ocaml-migrate-parsetree"
+  "ppx_tools_versioned"
+]

@@ -1,0 +1,6 @@
+B ../_build/default/ppx
+FLG -ppx '/Users/keigoi/Documents/linocaml/_build/default/.ppx/ppx_metaquot/ppx.exe --as-ppx --cookie '\''library-name="ppx_linocaml"'\'''
+FLG -w -40
+PKG compiler-libs
+PKG compiler-libs.common
+PKG ppx_tools

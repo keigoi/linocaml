@@ -348,11 +348,10 @@ let runner ({ ptype_loc = loc } as type_decl) =
     let mkfun = Exp.fun_ Label.nolabel None in
     let runner = mkfun (pvar "x") (mkfun (pconstr "()" []) ((app (runmonad ()) [app (evar "x") [constr "()" []]; obj])))
     and linval = disposeenv () in
-    let quoter = Ppx_deriving.create_quoter () in
     let runnertyp = Typ.arrow Nolabel (Typ.arrow Nolabel (tconstr "unit" []) (tconstr "monad" [objtyp; objtyp; Typ.any ()])) (Typ.any ())
     and linvaltyp = Typ.arrow Nolabel (tconstr "monad" [Typ.any (); objtyp; Typ.any ()]) (Typ.any ()) in
-    let runner = {pstr_desc = Pstr_value (Nonrecursive, [Vb.mk (Pat.constraint_ (pvar ("run_" ^ name)) runnertyp) (Ppx_deriving.sanitize ~quoter runner)]); pstr_loc = Location.none}
-    and linval = {pstr_desc = Pstr_value (Nonrecursive, [Vb.mk (Pat.constraint_ (pvar ("linval_"^name)) linvaltyp) (Ppx_deriving.sanitize ~quoter linval)]); pstr_loc = Location.none}
+    let runner = {pstr_desc = Pstr_value (Nonrecursive, [Vb.mk (Pat.constraint_ (pvar ("run_" ^ name)) runnertyp) runner]); pstr_loc = Location.none}
+    and linval = {pstr_desc = Pstr_value (Nonrecursive, [Vb.mk (Pat.constraint_ (pvar ("linval_"^name)) linvaltyp) linval]); pstr_loc = Location.none}
     in
     [runner; linval]
   | _ -> error loc "run_* can be derived only for record or closed object types"
@@ -391,3 +390,5 @@ let mapper_fun _ =
     List.flatten (List.map (stritem mapper) str)
   in
   {default_mapper with expr; structure}
+
+let () = Ast_mapper.register "ppx_linocaml" mapper_fun

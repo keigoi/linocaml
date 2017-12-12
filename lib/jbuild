@@ -1,0 +1,5 @@
+(jbuild_version 1)
+
+(library
+ ((name linocaml)
+  (public_name linocaml)))

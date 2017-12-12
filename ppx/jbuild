@@ -1,0 +1,9 @@
+(jbuild_version 1)
+
+(library
+ ((name ppx_linocaml)
+  (public_name linocaml.ppx)
+  (kind ppx_rewriter)
+  (ppx_runtime_libraries (linocaml))
+  (preprocess (pps (ppx_metaquot)))
+  (libraries (compiler-libs ppx_tools))))
