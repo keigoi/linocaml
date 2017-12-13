@@ -348,9 +348,9 @@ let runner ({ ptype_loc = loc } as type_decl) =
       tconstr "Linocaml.Base.lin" [Typ.object_ (List.map methtyp labels) Closed]
     in
     let mkfun = Exp.fun_ Label.nolabel None in
-    let runner = mkfun (pvar "x") (mkfun (pconstr "()" []) ((app (runmonad ()) [app (evar "x") [constr "()" []]; obj])))
+    let runner = mkfun (pvar "x") (mkfun (pvar "y") (app (runmonad ()) [app (evar "x") [evar "y"]; obj]))
     and linval = disposeenv () in
-    let runnertyp = Typ.arrow Nolabel (Typ.arrow Nolabel (tconstr "unit" []) (tconstr "monad" [objtyp; objtyp; Typ.any ()])) (Typ.any ())
+    let runnertyp = Typ.arrow Nolabel (Typ.arrow Nolabel (Typ.any ()) (tconstr "monad" [objtyp; objtyp; Typ.any ()])) (Typ.any ())
     and linvaltyp = Typ.arrow Nolabel (tconstr "monad" [Typ.any (); objtyp; Typ.any ()]) (Typ.any ()) in
     let runner = {pstr_desc = Pstr_value (Nonrecursive, [Vb.mk (Pat.constraint_ (pvar ("run_" ^ name)) runnertyp) runner]); pstr_loc = Location.none}
     and linval = {pstr_desc = Pstr_value (Nonrecursive, [Vb.mk (Pat.constraint_ (pvar ("linval_"^name)) linvaltyp) linval]); pstr_loc = Location.none}
