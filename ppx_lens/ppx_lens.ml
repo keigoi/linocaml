@@ -11,7 +11,7 @@ let raise_errorf = Ppx_deriving.raise_errorf
 let getterfield () = "Linocaml.Lens.get"
 let setterfield () = "Linocaml.Lens.put"
 
-                 
+
 let parse_options options =
   options |> List.iter (fun (name, expr) ->
     match name with
@@ -52,7 +52,7 @@ let change_tvars tvars typ =
   let rec fresh var =
     if List.exists (fun v->v=var) tvars then
       fresh (var^var)
-    else 
+    else
       var
   in
   let rename var =
@@ -82,12 +82,12 @@ let lens_typ rtyp ftyp =
 
 let object_update obj labels fields =
   let meth (fname,_,_) =
-    let expr = 
+    let expr =
       try
         List.assoc fname fields
       with Not_found ->
         Exp.send obj fname
-    in        
+    in
     {pcf_desc =
        Pcf_method (fname,
                    Public,
@@ -106,7 +106,7 @@ let str_of_type ~options ~path ({ ptype_loc = loc } as type_decl) =
     let varname = Ppx_deriving.mangle_type_decl (`Prefix deriver) type_decl in
     let getter field =
       mkfun (pconstr "Linocaml.Base.Lin_Internal__" [pvar varname]) (Exp.field (evar varname) (lid field))
-    and setter field = 
+    and setter field =
       mkfun (pconstr "Linocaml.Base.Lin_Internal__" [pvar varname]) (mkfun (pvar field) (constr "Linocaml.Base.Lin_Internal__" [record ~over:(evar varname) [(field, (evar field))]]))
     in
     let typ = Ppx_deriving.core_type_of_type_decl type_decl in
@@ -120,7 +120,7 @@ let str_of_type ~options ~path ({ ptype_loc = loc } as type_decl) =
     let fn = Exp.fun_ Label.nolabel None in
     let getter field =
       fn (pconstr "Linocaml.Base.Lin_Internal__" [pvar typename]) (Exp.send (evar typename) field)
-    and setter field = 
+    and setter field =
       fn (pconstr "Linocaml.Base.Lin_Internal__" [pvar typename]) (fn (pvar field.txt) (constr "Linocaml.Base.Lin_Internal__" [object_update (evar typename) labels [(field, (evar field.txt))]]))
     in
     let lens (field,_,ftyp) =
@@ -131,7 +131,7 @@ let str_of_type ~options ~path ({ ptype_loc = loc } as type_decl) =
   | _ -> raise_errorf ~loc "%s can be derived only for record or closed object types" deriver
 
 let sig_of_type ~options ~path ({ ptype_loc = loc } as type_decl) =
-  parse_options options;  
+  parse_options options;
   match type_decl with
   | {ptype_kind = Ptype_record labels} ->
     let typ = Ppx_deriving.core_type_of_type_decl type_decl in
@@ -145,8 +145,8 @@ let sig_of_type ~options ~path ({ ptype_loc = loc } as type_decl) =
     in
     List.map lens labels
   | _ -> raise_errorf ~loc "%s can only be derived for record types" deriver
-  
-       
+
+
 let () =
   Ppx_deriving.(register (create deriver
     ~type_decl_str: (fun ~options ~path type_decls ->
