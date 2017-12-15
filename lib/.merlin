@@ -1,2 +1,2 @@
 B ../_build/default/lib
-FLG -open Linocaml -w -40
+FLG -open Linocaml__ -w -40

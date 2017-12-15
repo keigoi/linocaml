@@ -146,7 +146,7 @@ let lin_pattern oldpat : pattern * (Longident.t Location.loc * string) list=
       pconstr ~loc "Linocaml.Base.Lin_Internal__" [pvar ~loc newvar]
 
     and wrap_datapat ({ppat_loc} as pat) =
-      pconstr ~loc:ppat_loc "Linocaml.Base.Data_Internal__" [pat]
+      pconstr ~loc:ppat_loc "Linocaml.Base.Data" [pat]
     in
     let newpat = traverse_pats wrap_datapat replace_linpat oldpat in
     let newpat =
@@ -180,7 +180,7 @@ let rec linval ({pexp_desc;pexp_loc;pexp_attributes} as outer) =
     {pexp_desc=Pexp_tuple(exprs);pexp_loc;pexp_attributes}, List.concat bindings
 
   | Pexp_construct ({txt=Lident "Data"},Some(expr)) ->
-     constr ~loc:pexp_loc ~attrs:pexp_attributes "Linocaml.Base.Data_Internal__" [expr], []
+     constr ~loc:pexp_loc ~attrs:pexp_attributes "Linocaml.Base.Data" [expr], []
 
   | Pexp_construct (lid,Some(expr)) ->
      let expr, binding = linval expr in
