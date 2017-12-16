@@ -1,5 +1,5 @@
-B ../_build/default/lib
-B ../_build/default/lwt
+B ../../_build/default/linocaml/lib
+B ../../_build/default/linocaml/lwt
 FLG -w -40
 PKG bigarray
 PKG bytes
