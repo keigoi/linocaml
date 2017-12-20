@@ -4,6 +4,8 @@ type empty = Empty
 type 'a data = Data of 'a
 type 'a lin  = Lin_Internal__ of 'a
 
+let o : ('a, 'b, 'a, 'b) slot = {Lens.get=(fun x -> x); put=(fun _ y -> y)}
+
 module type IO = sig
   type +'a io
   val (>>=) : 'a io -> ('a -> 'b io) -> 'b io
@@ -33,6 +35,8 @@ module type LIN_IO = sig
   val putval : (empty,'a lin,'pre,'post) slot -> 'a -> ('pre,'post,unit lin) monad
 
   val lin_split : ('p, ('a lin * 'b lin) lin, unit lin) monad -> ('p, 'a lin, 'b lin) monad
+
+  val run_o : ('a -> (empty, empty, 'b lin) monad) -> 'a -> 'b IO.io
 
   module Internal : sig
     val __monad : ('a -> ('b * 'c) IO.io) -> ('a, 'b, 'c) monad
@@ -83,6 +87,7 @@ struct
     M.(>>=) (m pre) (fun (Lin_Internal__ (a, b), Lin_Internal__ ()) ->
     M.return (a, b))
 
+  let run_o f x = IO.(>>=) (f x Empty) (fun (_,Lin_Internal__ x) -> IO.return x)
 
   module Internal = struct
     let __monad f = f
