@@ -7,5 +7,7 @@ PKG lwt
 PKG lwt.log
 PKG lwt.unix
 PKG result
+PKG threads
+PKG threads.posix
 PKG unix
 S ../lib

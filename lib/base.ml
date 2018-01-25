@@ -25,6 +25,9 @@ module type LIN_IO = sig
   val (>>) : ('pre,'mid,unit lin) monad -> ('mid,'post,'b lin) monad -> ('pre,'post,'b lin) monad
   val (>>=) : ('pre,'mid,'a lin) monad -> ('a lin -> ('mid,'post,'b lin) monad) bind -> ('pre,'post,'b lin) monad
 
+  val (^^) : ('p, 'q, 'pre, 'post) slot -> ('p, 'q, 'a) monad -> ('pre, 'post, 'a) monad
+  val ( *! ) : ('p, 'r, 'mid, 'post) slot -> ('q, empty, 'pre, 'mid) slot -> ('p * 'q, 'r, 'pre, 'post) slot
+
   (* get a value from slot *)
   val get : ('a lin,empty,'pre,'post) slot -> ('pre,'post,'a lin) monad
 
@@ -76,6 +79,12 @@ struct
   let (>>) m n = m >>= (fun (Lin_Internal__ ()) -> n)
 
   open Lens
+
+  let (^^) {get;put} m pre = M.(>>=) (m (get pre)) (fun (q, a) -> M.return (put pre q, a))
+
+  let ( *! ) : 'a 'b 'pre 'mid 'c 'post. ('a, 'b, 'mid, 'post) slot -> ('c, empty, 'pre, 'mid) slot -> ('a * 'c, 'b, 'pre, 'post) slot =
+    fun {get=get1;put=put1} {get=get2;put=put2} ->
+    {get=(fun pre -> get1 (put2 pre Empty), get2 pre); put=(fun pre d -> put1 (put2 pre Empty) d)}
 
   let get {get;put} pre = M.return (put pre Empty, get pre)
   let put {get;put} m pre =
