@@ -149,7 +149,7 @@ let () =
     make [1;2;3] >>
     map (fun x -> x+1) s s >>
     map string_of_int s s >>
-    iter (fun x -> print_endline x; return ()) s
+    iter (fun x -> print_endline x) s
   in
   run_ctx f ()
 
@@ -176,7 +176,7 @@ let () =
     make [100;200;300] >>
     put s (map (fun x -> x*2) s) >>
     put s (map string_of_int s) >>
-    iter (fun x -> print_endline x; return ()) s
+    iter (fun x -> print_endline x) s
   in
   run_ctx f ()
 
