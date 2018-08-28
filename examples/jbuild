@@ -1,7 +1,0 @@
-(jbuild_version 1)
-
-(executable
-  ((name linlist)
-   (modules (linlist))
-   (preprocess (pps (linocaml.ppx linocaml.ppx_lens)))
-   (libraries (linocaml))))

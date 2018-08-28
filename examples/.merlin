@@ -1,10 +1,10 @@
-B ../_build/default/examples
-B ../_build/default/lib
-FLG -ppx '/Users/keigoi/Documents/linocaml/_build/default/.ppx/linocaml.ppx+linocaml.ppx_lens/ppx.exe --as-ppx'
-FLG -w -40
-PKG compiler-libs
-PKG compiler-libs.common
-PKG ppx_deriving.runtime
-PKG ppx_stage.runtime-lib
-PKG result
+B /Users/keigoi/.opam/4.05.0/lib/ppx_deriving
+B /Users/keigoi/.opam/4.05.0/lib/result
+B ../_build/default/examples/.linlist.eobjs
+B ../_build/default/lib/.linocaml.objs
+S /Users/keigoi/.opam/4.05.0/lib/ppx_deriving
+S /Users/keigoi/.opam/4.05.0/lib/result
+S .
 S ../lib
+FLG -ppx '/Users/keigoi/Documents/linocaml/_build/default/.ppx/linocaml.ppx+linocaml.ppx_lens/ppx.exe --as-ppx'
+FLG -w @a-4-29-40-41-42-44-45-48-58-59-60-40 -strict-sequence -strict-formats -short-paths -keep-locs

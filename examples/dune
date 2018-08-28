@@ -1,0 +1,6 @@
+(executable
+  (name linlist)
+  (public_name linlist)
+  (modules linlist)
+  (preprocess (pps linocaml.ppx linocaml.ppx_lens))
+  (libraries linocaml))

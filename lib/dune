@@ -1,0 +1,3 @@
+(library
+ (name linocaml)
+ (public_name linocaml))

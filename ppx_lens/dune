@@ -1,0 +1,7 @@
+(library
+ (name ppx_lens)
+ (public_name linocaml.ppx_lens)
+ (kind ppx_deriver)
+ (ppx_runtime_libraries linocaml)
+ (preprocess no_preprocessing)
+ (libraries compiler-libs ppx_tools_versioned ppx_deriving.api))
