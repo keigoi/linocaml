@@ -66,13 +66,13 @@ let add_takeval es expr =
         [app (takeval_raw ()) [slot];
          lam (pvar v) expr]) es expr
 
-let rec traverse_pats f(*var wrapper*) g(*#tconst wrapper*) ({ppat_desc} as patouter) =
+let rec traverse_pats f(*var wrapper*) g(*#tconst wrapper*) ({ppat_desc; _} as patouter) =
   match ppat_desc with
   | Ppat_any -> f patouter
         (* _ *)
   | Ppat_var _ -> f patouter
         (* x *)
-  | Ppat_alias (pat,tvarloc) ->
+  | Ppat_alias (_, tvarloc) ->
      error tvarloc.loc "as-pattern is forbidden at %lin match" (* TODO relax this *)
      (* {patouter with ppat_desc=Ppat_alias(traverse_pats f g pat,tvarloc)} *)
         (* P as 'a *)
@@ -95,7 +95,7 @@ let rec traverse_pats f(*var wrapper*) g(*#tconst wrapper*) ({ppat_desc} as pato
            C (P1, ..., Pn)  Some (Ppat_tuple [P1; ...; Pn])
          *)
   | Ppat_variant (lab,Some(pat)) -> {patouter with ppat_desc=Ppat_variant(lab,Some(traverse_pats f g pat))}
-  | Ppat_variant (lab,None) -> patouter
+  | Ppat_variant (_, None) -> patouter
         (* `A             (None)
            `A P           (Some P)
          *)
@@ -121,7 +121,7 @@ let rec traverse_pats f(*var wrapper*) g(*#tconst wrapper*) ({ppat_desc} as pato
   | Ppat_exception _ | Ppat_extension _ | Ppat_open _ ->
        error patouter.ppat_loc "%lin cannot handle this pattern"
 
-let rec is_linpat {ppat_desc;ppat_loc} =
+let rec is_linpat {ppat_desc;ppat_loc; _} =
   match ppat_desc with
   | Ppat_type _ -> true
   | Ppat_alias (pat,_) -> is_linpat pat
@@ -137,15 +137,15 @@ let rec is_linpat {ppat_desc;ppat_loc} =
 
 (* (#p, #q, x) ==> (__tmp1, __tmp2, x), [(#p, "__tmp1"), (#q, "__tmp2")] *)
 let lin_pattern oldpat : pattern * (Longident.t Location.loc * string) list=
-  let wrap ({ppat_loc} as oldpat) =
+  let wrap ({ppat_loc; _} as oldpat) =
     let lin_vars = ref []
     in
-    let replace_linpat ({loc} as linvar) =
+    let replace_linpat ({loc; _} as linvar) =
       let newvar = newname "match" in
       lin_vars := (linvar,newvar) :: !lin_vars;
       pconstr ~loc "Linocaml.Base.Lin_Internal__" [pvar ~loc newvar]
 
-    and wrap_datapat ({ppat_loc} as pat) =
+    and wrap_datapat ({ppat_loc; _} as pat) =
       pconstr ~loc:ppat_loc "Linocaml.Base.Data" [pat]
     in
     let newpat = traverse_pats wrap_datapat replace_linpat oldpat in
@@ -160,7 +160,7 @@ let lin_pattern oldpat : pattern * (Longident.t Location.loc * string) list=
   let newpat,lin_vars = wrap oldpat in
   newpat, lin_vars
 
-let make_lin_match_case ({pc_lhs=pat;pc_rhs=expr} as case) =
+let make_lin_match_case ({pc_lhs=pat;pc_rhs=expr; _} as case) =
   let newpat, linvars = lin_pattern pat in
   {case with pc_lhs=newpat; pc_rhs=add_putval linvars expr}
 
@@ -171,7 +171,7 @@ let rec linval ({pexp_desc;pexp_loc;pexp_attributes} as outer) =
   | Pexp_variant (_,None) ->
      outer, []
 
-  | Pexp_apply ({pexp_desc=Pexp_ident {txt=Lident"!!"}} , [(Nolabel,exp)]) ->
+  | Pexp_apply ({pexp_desc=Pexp_ident {txt=Lident"!!"; _};_} , [(Nolabel,exp)]) ->
      let newvar = newname "linval" in
      constr ~loc:pexp_loc "Linocaml.Base.Lin_Internal__" [longident ~loc:pexp_loc newvar], [(newvar,exp)]
 
@@ -179,7 +179,7 @@ let rec linval ({pexp_desc;pexp_loc;pexp_attributes} as outer) =
     let exprs, bindings = List.split (List.map linval exprs) in
     {pexp_desc=Pexp_tuple(exprs);pexp_loc;pexp_attributes}, List.concat bindings
 
-  | Pexp_construct ({txt=Lident "Data"},Some(expr)) ->
+  | Pexp_construct ({txt=Lident "Data"; _},Some(expr)) ->
      constr ~loc:pexp_loc ~attrs:pexp_attributes "Linocaml.Base.Data" [expr], []
 
   | Pexp_construct (lid,Some(expr)) ->
@@ -235,11 +235,11 @@ let rec linval ({pexp_desc;pexp_loc;pexp_attributes} as outer) =
      | _ ->
         error pexp_loc "function call inside %linval cannot contain slot references (!! slotname)"
      end
-  | Pexp_object ({pcstr_self={ppat_desc=Ppat_any}; pcstr_fields=fields} as o) ->
+  | Pexp_object ({pcstr_self={ppat_desc=Ppat_any; _}; pcstr_fields=fields} as o) ->
      let new_fields, bindings =
        List.split @@ List.map
          (function
-          | ({pcf_desc=Pcf_method (name,Public,Cfk_concrete(fl,expr))} as f) ->
+          | ({pcf_desc=Pcf_method (name,Public,Cfk_concrete(fl,expr)); _} as f) ->
              let new_expr, binding = linval expr in
              {f with pcf_desc=Pcf_method(name,Public,Cfk_concrete(fl,new_expr))}, binding
           | _ ->
@@ -253,7 +253,7 @@ let rec linval ({pexp_desc;pexp_loc;pexp_attributes} as outer) =
   | Pexp_poly (expr,None) ->
      let expr, binding = linval expr in
      {pexp_desc=Pexp_poly(expr,None);pexp_loc;pexp_attributes}, binding
-  | Pexp_poly (expr,_) ->
+  | Pexp_poly (_,_) ->
      failwith "object method can not have type ascription"
   | Pexp_let (_,_,_) | Pexp_function _
   | Pexp_fun (_,_,_,_) | Pexp_match (_,_) | Pexp_try (_,_)
@@ -273,13 +273,13 @@ let expression_mapper id mapper exp attrs =
   match id, exp.pexp_desc with
 
   | "lin", Pexp_let (Nonrecursive, vbls, expr) ->
-     let lin_binding ({pvb_pat} as vb) =
+     let lin_binding ({pvb_pat; _} as vb) =
          let newpat, linvars = lin_pattern pvb_pat in
          {vb with pvb_pat=newpat}, linvars
      in
      let new_vbls, linvars = List.split (List.map lin_binding vbls) in
      let new_expr = add_putval (List.concat linvars) expr in
-     let make_bind {pvb_pat;pvb_expr;pvb_loc;pvb_attributes} expr =
+     let make_bind {pvb_pat;pvb_expr;pvb_loc; _} expr =
        app ~loc:pexp_loc ~attrs:pexp_attributes
            (monad_bind ())
            [pvb_expr; app ~loc:pvb_loc (mkbindfun ()) [lam ~loc:pvb_loc pvb_pat expr]]
@@ -328,9 +328,9 @@ let expression_mapper id mapper exp attrs =
 
   | _ -> None
 
-let runner ({ ptype_loc = loc } as type_decl) =
+let runner ({ ptype_loc = loc; _ } as type_decl) =
   match type_decl with
-  | {ptype_name = {txt = name}; ptype_manifest = Some ({ptyp_desc = Ptyp_object (labels, Closed)})} ->
+  | {ptype_name = {txt = name; _}; ptype_manifest = Some ({ptyp_desc = Ptyp_object (labels, Closed); _}); _} ->
     let obj =
       let meth (fname,_,_) =
         {pcf_desc =
@@ -359,19 +359,19 @@ let runner ({ ptype_loc = loc } as type_decl) =
   | _ -> error loc "run_* can be derived only for record or closed object types"
 
 let has_runner attrs =
-  List.exists (fun ({txt = name},_) -> name = "runner")  attrs
+  List.exists (fun ({txt = name; _},_) -> name = "runner")  attrs
 
 let mapper_fun _ _ =
   let open Ast_mapper in
   let rec expr mapper outer =
   match outer with
-  | {pexp_desc=Pexp_extension ({ txt = id }, PStr([{pstr_desc=Pstr_eval(inner,inner_attrs)}])); pexp_attributes=outer_attrs} ->
+  | {pexp_desc=Pexp_extension ({ txt = id; _ }, PStr([{pstr_desc=Pstr_eval(inner,inner_attrs); _}])); pexp_attributes=outer_attrs; _} ->
      begin match expression_mapper id mapper inner (inner_attrs @ outer_attrs) with
      | Some exp -> exp
      | None -> default_mapper.expr mapper outer
      end
   (* Lens.compose to gain full polymorphism *)
-  | {pexp_desc=Pexp_apply({pexp_desc=Pexp_ident({txt=Lident "##.";loc});pexp_loc=inner_loc;pexp_attributes=inner_attr},[(_,e1);(_,e2)]); pexp_loc=outer_loc; pexp_attributes=outer_attr} ->
+  | {pexp_desc=Pexp_apply({pexp_desc=Pexp_ident({txt=Lident "##."; _}); _},[(_,e1);(_,e2)]); _} ->
      let e1 = expr mapper e1
      and e2 = expr mapper e2 in
      (* brain-dead specialization of Lens.compose. problematic in various aspects: name capture, duplicated code, ... *)
@@ -379,7 +379,7 @@ let mapper_fun _ _ =
   | _ -> default_mapper.expr mapper outer
   and stritem mapper outer =
     match outer with
-    | {pstr_desc = Pstr_type (_,type_decls)} ->
+    | {pstr_desc = Pstr_type (_,type_decls); _} ->
        let runners =
          List.map (fun type_decl ->
            if has_runner type_decl.ptype_attributes then

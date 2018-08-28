@@ -2,7 +2,6 @@ open Migrate_parsetree
 open Ast_405
 
 open Asttypes
-open Longident
 open Parsetree
 open Ast_helper
 open Ast_convenience_405
@@ -22,7 +21,7 @@ let parse_options options =
     match name with
     | _ -> raise_errorf ~loc:expr.pexp_loc "%s does not support option %s" deriver name)
 
-let rec traverse f ({ptyp_desc; ptyp_loc = loc} as typ) =
+let rec traverse f ({ptyp_desc; ptyp_loc = loc; _} as typ) =
   let f ptyp_desc =
     match ptyp_desc with
     | Ptyp_var var -> Ptyp_var (f var)
@@ -102,11 +101,11 @@ let object_update obj labels fields =
   in
   Exp.object_ {pcstr_self = Pat.any (); pcstr_fields = List.map meth labels}
 
-let str_of_type ~options ~path ({ ptype_loc = loc } as type_decl) =
+let str_of_type ~options ({ ptype_loc = loc; _ } as type_decl) =
   parse_options options;
   let quoter = Ppx_deriving.create_quoter () in
   match type_decl with
-  | {ptype_kind = Ptype_record labels} ->
+  | {ptype_kind = Ptype_record labels; _} ->
     let mkfun = Exp.fun_ Label.nolabel None in
     let varname = Ppx_deriving.mangle_type_decl (`Prefix deriver) (Convert_current.copy_type_declaration type_decl) in
     let getter field =
@@ -115,14 +114,14 @@ let str_of_type ~options ~path ({ ptype_loc = loc } as type_decl) =
       mkfun (pconstr "Linocaml.Base.Lin_Internal__" [pvar varname]) (mkfun (pvar field) (constr "Linocaml.Base.Lin_Internal__" [record ~over:(evar varname) [(field, (evar field))]]))
     in
     let typ = Ppx_deriving.core_type_of_type_decl (Convert_current.copy_type_declaration type_decl) in
-    let lens { pld_name = { txt = name }; pld_type } =
+    let lens { pld_name = { txt = name; _ }; pld_type ; _} =
       Vb.mk (Pat.constraint_ (pvar name) (lens_typ (Convert_405.copy_core_type typ) pld_type))
         @@ Convert_405.copy_expression
              (Ppx_deriving.sanitize ~quoter
                 @@ Convert_current.copy_expression (record [(getterfield (),getter name); (setterfield (),setter name)]))
     in
     List.map lens labels
-  | {ptype_manifest = Some ({ptyp_desc = Ptyp_object (labels, Closed)} as typ)} ->
+  | {ptype_manifest = Some ({ptyp_desc = Ptyp_object (labels, Closed); _} as typ); _} ->
     let typename = Ppx_deriving.mangle_type_decl (`Prefix deriver) (Convert_current.copy_type_declaration type_decl) in
     let fn = Exp.fun_ Label.nolabel None in
     let getter field =
@@ -139,16 +138,16 @@ let str_of_type ~options ~path ({ ptype_loc = loc } as type_decl) =
     List.map lens labels
   | _ -> raise_errorf ~loc "%s can be derived only for record or closed object types" deriver
 
-let sig_of_type ~options ~path ({ ptype_loc = loc } as type_decl) =
+let sig_of_type ~options ({ ptype_loc = loc; _ } as type_decl) =
   parse_options options;
   match type_decl with
-  | {ptype_kind = Ptype_record labels} ->
+  | {ptype_kind = Ptype_record labels; _} ->
     let typ = Ppx_deriving.core_type_of_type_decl (Convert_current.copy_type_declaration type_decl) in
-    let lens { pld_name = { txt = name }; pld_type } =
+    let lens { pld_name = { txt = name; _ }; pld_type; _ } =
       Sig.value (Val.mk (Location.mknoloc name) (lens_typ (Convert_405.copy_core_type typ) pld_type))
     in
     List.map lens labels
-  | {ptype_manifest = Some ({ptyp_desc = Ptyp_object (labels, Closed)} as typ)} ->
+  | {ptype_manifest = Some ({ptyp_desc = Ptyp_object (labels, Closed); _} as typ); _} ->
     let lens (field,_,ftyp) =
       Sig.value (Val.mk field (lens_typ typ ftyp))
     in
@@ -158,14 +157,14 @@ let sig_of_type ~options ~path ({ ptype_loc = loc } as type_decl) =
 
 let () =
   Ppx_deriving.(register (create deriver
-    ~type_decl_str: (fun ~options ~path type_decls ->
+    ~type_decl_str: (fun ~options ~path:_ type_decls ->
       let options = List.map (fun (str, expr) -> (str, Convert_405.copy_expression expr)) options in
       let type_decls = List.map Convert_405.copy_type_declaration type_decls in
-      Convert_current.copy_structure @@ [Str.value Nonrecursive (List.concat (List.map (str_of_type ~options ~path) type_decls))])
-    ~type_decl_sig: (fun ~options ~path type_decls ->
+      Convert_current.copy_structure @@ [Str.value Nonrecursive (List.concat (List.map (str_of_type ~options) type_decls))])
+    ~type_decl_sig: (fun ~options ~path:_ type_decls ->
       let options = List.map (fun (str, expr) -> (str, Convert_405.copy_expression expr)) options in
       let type_decls = List.map Convert_405.copy_type_declaration type_decls in
       Convert_current.copy_signature @@
-      List.concat (List.map (sig_of_type ~options ~path) type_decls))
+      List.concat (List.map (sig_of_type ~options) type_decls))
     ()
   ))

@@ -87,10 +87,10 @@ struct
     {get=(fun pre -> get1 (put2 pre Empty), get2 pre); put=(fun pre d -> put1 (put2 pre Empty) d)}
 
   let get {get;put} pre = M.return (put pre Empty, get pre)
-  let put {get;put} m pre =
+  let put {put; _} m pre =
     M.(>>=) (m pre) (fun (mid, v) -> M.return (put mid v, Lin_Internal__ ()))
 
-  let putval {put} a pre = M.return (put pre (Lin_Internal__ a), Lin_Internal__ ())
+  let putval {put; _} a pre = M.return (put pre (Lin_Internal__ a), Lin_Internal__ ())
 
   let lin_split m pre =
     M.(>>=) (m pre) (fun (Lin_Internal__ (a, b), Lin_Internal__ ()) ->
@@ -110,7 +110,7 @@ struct
       let __return_raw v pre = M.return (pre, v)
       let __bind_raw = fun m f pre -> M.(>>=) (m pre) (fun (mid,x) -> f x mid)
 
-      let __putval_raw = fun {put} v pre ->
+      let __putval_raw = fun {put; _} v pre ->
         M.return (put pre (Lin_Internal__ v), ())
 
       let __takeval_raw {get;put} pre =

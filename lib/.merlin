@@ -1,2 +1,0 @@
-B ../../_build/default/linocaml/lib
-FLG -open Linocaml -w -40

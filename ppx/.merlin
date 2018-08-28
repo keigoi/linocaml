@@ -1,8 +1,0 @@
-B ../../_build/default/linocaml/ppx
-FLG -ppx '/Users/keigoi/Documents/scribble-toolchain/_build/default/.ppx/ppx_tools_versioned.metaquot_405/ppx.exe --as-ppx --cookie '\''library-name="ppx_linocaml"'\'''
-FLG -w -40
-PKG compiler-libs
-PKG compiler-libs.common
-PKG ocaml-migrate-parsetree
-PKG ppx_tools_versioned
-PKG result
