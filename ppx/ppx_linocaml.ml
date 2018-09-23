@@ -19,32 +19,32 @@ let root_module = ref "Syntax"
 
 let longident ?loc str = evar ?loc str
 
-let monad_bind () =
-  longident (!root_module ^ ".bind")
-
 let emptyslot () =
   longident (!root_module ^ ".empty")
 
-let monad_bind_raw () =
-  longident (!root_module ^ ".Internal.__bind_raw")
+let monad_bind_data () =
+  longident (!root_module ^ ".bind_data")
 
-let monad_return_raw () =
-  longident (!root_module ^ ".Internal.__return_raw")
+let monad_bind_lin () =
+  longident (!root_module ^ ".bind_lin")
 
-let mkbindfun () =
-  longident (!root_module ^ ".Internal.__mkbindfun")
+let monad_return_lin () =
+  longident (!root_module ^ ".return_lin")
 
-let putval_raw () =
-  longident (!root_module ^ ".Internal.__putval_raw")
+let get_lin () =
+  longident (!root_module ^ ".get_lin")
 
-let takeval_raw () =
-  longident (!root_module ^ ".Internal.__takeval_raw")
+let put_lin () =
+  longident (!root_module ^ ".put_linval")
+
+let mkbind () =
+  longident (!root_module ^ ".Internal._mkbind")
 
 let runmonad () =
-  longident (!root_module ^ ".Internal.__run")
+  longident (!root_module ^ ".Internal._run")
 
 let disposeenv () =
-  longident (!root_module ^ ".Internal.__dispose_env")
+  longident (!root_module ^ ".Internal._dispose_env")
 
 let error loc (s:string) =
   Location.raise_errorf ~loc "%s" s
@@ -52,19 +52,20 @@ let error loc (s:string) =
 
 let add_putval es expr =
   let insert_expr (linvar, newvar) =
-    app (* ~loc:oldpat.ppat_loc *) (putval_raw ()) [Exp.ident ~loc:linvar.loc linvar; evar ~loc:linvar.loc newvar]
+    app (* ~loc:oldpat.ppat_loc *) (put_lin ()) [Exp.ident ~loc:linvar.loc linvar; evar ~loc:linvar.loc newvar]
   in
   List.fold_right (fun e expr ->
       app
-        (monad_bind_raw ())
+        (monad_bind_data ())
         [insert_expr e; lam (punit ()) expr]) es expr
 
 let add_takeval es expr =
-  List.fold_right (fun (v,slot) expr ->
+  List.fold_right
+    (fun (v,slot) expr ->
       app
-        (monad_bind_raw ())
-        [app (takeval_raw ()) [slot];
-         lam (pvar v) expr]) es expr
+        (monad_bind_lin ())
+        [app (get_lin ()) [slot]; app (mkbind ()) [lam (pvar v) expr]])
+    es expr
 
 let rec traverse_pats f(*var wrapper*) g(*#tconst wrapper*) ({ppat_desc; _} as patouter) =
   match ppat_desc with
@@ -173,7 +174,7 @@ let rec linval ({pexp_desc;pexp_loc;pexp_attributes} as outer) =
 
   | Pexp_apply ({pexp_desc=Pexp_ident {txt=Lident"!!"; _};_} , [(Nolabel,exp)]) ->
      let newvar = newname "linval" in
-     constr ~loc:pexp_loc "Linocaml.Base.Lin_Internal__" [longident ~loc:pexp_loc newvar], [(newvar,exp)]
+     longident ~loc:pexp_loc newvar, [(newvar,exp)]
 
   | Pexp_tuple (exprs) ->
     let exprs, bindings = List.split (List.map linval exprs) in
@@ -281,8 +282,8 @@ let expression_mapper id mapper exp attrs =
      let new_expr = add_putval (List.concat linvars) expr in
      let make_bind {pvb_pat;pvb_expr;pvb_loc; _} expr =
        app ~loc:pexp_loc ~attrs:pexp_attributes
-           (monad_bind ())
-           [pvb_expr; app ~loc:pvb_loc (mkbindfun ()) [lam ~loc:pvb_loc pvb_pat expr]]
+           (monad_bind_lin ())
+           [pvb_expr; app ~loc:pvb_loc (mkbind ()) [lam ~loc:pvb_loc pvb_pat expr]]
      in
      let new_expr = List.fold_right make_bind new_vbls new_expr
      in
@@ -292,8 +293,8 @@ let expression_mapper id mapper exp attrs =
      let new_cases = List.map make_lin_match_case cases in
      let new_expr =
        app ~loc:pexp_loc ~attrs:pexp_attributes
-         (monad_bind_raw ())
-         [matched; Exp.function_ ~loc:pexp_loc new_cases]
+         (monad_bind_lin ())
+         [matched; app ~loc:pexp_loc (mkbind ()) [Exp.function_ ~loc:pexp_loc new_cases]]
      in
      Some (process_inner new_expr)
 
@@ -301,7 +302,7 @@ let expression_mapper id mapper exp attrs =
      let cases = List.map make_lin_match_case cases in
      let new_expr =
        app ~loc:pexp_loc ~attrs:pexp_attributes
-         (mkbindfun ())
+         (mkbind ())
          [{pexp_desc=Pexp_function(cases); pexp_loc; pexp_attributes}]
      in
      Some (process_inner new_expr)
@@ -311,7 +312,7 @@ let expression_mapper id mapper exp attrs =
      let newexpr = add_putval linvars expr in
      let new_expr =
        app ~loc:pexp_loc ~attrs:pexp_attributes
-         (mkbindfun ())
+         (mkbind ())
          [{pexp_desc=Pexp_fun(Nolabel,None,newpat,newexpr); pexp_loc; pexp_attributes}]
      in
      Some (process_inner new_expr)
@@ -321,8 +322,7 @@ let expression_mapper id mapper exp attrs =
 
   | "linret", expr ->
      let new_exp, bindings = linval {pexp_desc=expr;pexp_loc;pexp_attributes} in
-     let new_exp = constr ~loc:pexp_loc "Linocaml.Base.Lin_Internal__" [new_exp] in
-     let new_exp = app (monad_return_raw ()) [new_exp] in
+     let new_exp = app (monad_return_lin ()) [new_exp] in
      let new_exp = add_takeval bindings new_exp in
      Some(new_exp)
 
@@ -375,7 +375,7 @@ let mapper_fun _ _ =
      let e1 = expr mapper e1
      and e2 = expr mapper e2 in
      (* brain-dead specialization of Lens.compose. problematic in various aspects: name capture, duplicated code, ... *)
-     [%expr let open Linocaml.Lens in {get=(fun out1__ -> [%e e1].get ([%e e2].get out1__)); put=(fun out1__ b__ -> [%e e2].put out1__ ([%e e1].put ([%e e2].get out1__) b__))}]
+     [%expr {get=(fun out1__ -> [%e e1].get ([%e e2].get out1__)); put=(fun out1__ b__ -> [%e e2].put out1__ ([%e e1].put ([%e e2].get out1__) b__))}]
   | _ -> default_mapper.expr mapper outer
   and stritem mapper outer =
     match outer with

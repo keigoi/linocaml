@@ -2,5 +2,6 @@
   (name linlist)
   (public_name linlist)
   (modules linlist)
+  (flags ("-short-paths" "-w" "-32")) ; Unused value declaration.
   (preprocess (pps linocaml.ppx linocaml.ppx_lens))
   (libraries linocaml))

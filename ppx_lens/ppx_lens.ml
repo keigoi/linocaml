@@ -12,8 +12,8 @@ module Convert_405 = Migrate_parsetree_versions.Convert(OCaml_current)(OCaml_405
 let deriver = "lens"
 let raise_errorf = Ppx_deriving.raise_errorf
 
-let getterfield () = "Linocaml.Lens.get"
-let setterfield () = "Linocaml.Lens.put"
+let getterfield () = "Linocaml.Base.get"
+let setterfield () = "Linocaml.Base.put"
 
 
 let parse_options options =
@@ -82,7 +82,7 @@ let lens_typ rtyp ftyp =
   let vars = free_tvars getter_typ in
   let mapping, setter_2ndarg = change_tvars vars ftyp in
   let setter_result = rename_tvars mapping rtyp in
-  Typ.constr (lid "Linocaml.Lens.t") [ftyp; setter_2ndarg; Typ.constr (lid "Linocaml.Base.lin") [rtyp]; Typ.constr (lid "Linocaml.Base.lin") [setter_result]]
+  Typ.constr (lid "Linocaml.Base.lens") [ftyp; setter_2ndarg; Typ.constr (lid "Linocaml.Base.lin") [rtyp]; Typ.constr (lid "Linocaml.Base.lin") [setter_result]]
 
 let object_update obj labels fields =
   let meth (fname,_,_) =
