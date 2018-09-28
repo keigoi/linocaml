@@ -3,8 +3,8 @@ B /Users/keigoi/.opam/default/lib/ocaml/threads
 B /Users/keigoi/.opam/default/lib/ppx_deriving
 B /Users/keigoi/.opam/default/lib/result
 B ../_build/default/examples/.ex_array.eobjs
-B ../_build/default/examples/.linlist.eobjs
-B ../_build/default/examples/.session.eobjs
+B ../_build/default/examples/.ex_linlist.eobjs
+B ../_build/default/examples/.ex_session.eobjs
 B ../_build/default/lib/.linocaml.objs
 S /Users/keigoi/.opam/default/lib/ocaml
 S /Users/keigoi/.opam/default/lib/ocaml/threads
