@@ -4,8 +4,13 @@ type empty = Base.empty
 type 'a data = 'a Base.data = Data of 'a
 type 'a lin  = 'a Base.lin
 
-include Base.Make(struct
+module M = Base.Make(struct
   type 'a io = 'a
   let bind a f = f a
   let return a = a
 end)
+
+include M
+
+module LinArray = LinArray.Make(M)(M)
+module LinArray1 = LinArray1.Make(M)(M)

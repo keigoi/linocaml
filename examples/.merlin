@@ -1,10 +1,16 @@
+B /Users/keigoi/.opam/default/lib/ocaml
+B /Users/keigoi/.opam/default/lib/ocaml/threads
 B /Users/keigoi/.opam/default/lib/ppx_deriving
 B /Users/keigoi/.opam/default/lib/result
+B ../_build/default/examples/.ex_array.eobjs
 B ../_build/default/examples/.linlist.eobjs
+B ../_build/default/examples/.session.eobjs
 B ../_build/default/lib/.linocaml.objs
+S /Users/keigoi/.opam/default/lib/ocaml
+S /Users/keigoi/.opam/default/lib/ocaml/threads
 S /Users/keigoi/.opam/default/lib/ppx_deriving
 S /Users/keigoi/.opam/default/lib/result
 S .
 S ../lib
 FLG -ppx '/Users/keigoi/Documents/linocaml/_build/default/.ppx/linocaml.ppx+linocaml.ppx_lens/ppx.exe --as-ppx'
-FLG -short-paths -w -32
+FLG -short-paths -w -32 -short-paths -w -32 -short-paths -w -32

@@ -2,12 +2,6 @@
 open Linocaml.Base
 open Linocaml.Direct
 
-let run_safeio : ([`cons of 'hd * 'a] as 'a, 'a, unit data) monad -> unit = fun m ->
-  let rec cxt = `cons (Empty, cxt) in
-  Linocaml.Direct.Syntax.Internal._run m cxt
-
-(* let zero : ('a, 'aa, [`cons of ]) = {get=(fun (`cons(hd,_)) -> hd); put=(fun (`cons(_,tl)) hd -> `cons(hd,tl))} *)
-
 (* declaring slots *)
 type ('a,'b,'c) ctx = <s:'a; t:'b; u:'c>
 [@@deriving lens]
@@ -39,7 +33,7 @@ type 'a linlist_ = Cons of 'a data * 'a linlist | Nil
 
 (* iterating over a list in slot "s"  *)
 let rec iter f =
-  get_lin s >>- function%lin
+  match%lin get_lin s with
   | Cons(x, #s) -> f x; iter f
   | Nil -> return ()
 
@@ -62,9 +56,7 @@ let rev_map f =
   in
   (* accumulator *)
   put_linval t Nil >>
-  loop () >>
-  (* put_lin it back to s *)
-  put_lin s (get_lin t)
+  loop ()
 
 (* turn a normal list into linear list *)
 let rec make = function

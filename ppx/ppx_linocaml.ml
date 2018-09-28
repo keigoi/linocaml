@@ -67,60 +67,75 @@ let add_takeval es expr =
         [app (get_lin ()) [slot]; app (mkbind ()) [lam (pvar v) expr]])
     es expr
 
-let rec traverse_pats f(*var wrapper*) g(*#tconst wrapper*) ({ppat_desc; _} as patouter) =
+(**
+ * The main function converting lens-patterns
+ *)
+let convert_pattern (p : pattern) : pattern * (Longident.t Location.loc * string) list =
+  let lin_vars = ref [] in
+  let replace_linpat ({loc; _} as linvar) =
+    let newvar = newname "match" in
+    lin_vars := (linvar,newvar) :: !lin_vars;
+    pconstr ~loc "Linocaml.Base.Lin_Internal__" [pvar ~loc newvar]
+  and wrap_datapat ({ppat_loc; _} as pat) =
+    pconstr ~loc:ppat_loc "Linocaml.Base.Data" [pat]
+  in
+  let rec traverse ({ppat_desc; _} as patouter) =
   match ppat_desc with
-  | Ppat_any -> f patouter
+  | Ppat_type lidloc -> replace_linpat lidloc
+        (* #tconst *)
+  | Ppat_any -> wrap_datapat patouter
         (* _ *)
-  | Ppat_var _ -> f patouter
+  | Ppat_var _ -> wrap_datapat patouter
         (* x *)
-  | Ppat_alias (_, tvarloc) ->
-     error tvarloc.loc "as-pattern is forbidden at %lin match" (* TODO relax this *)
-     (* {patouter with ppat_desc=Ppat_alias(traverse_pats f g pat,tvarloc)} *)
-        (* P as 'a *)
-  | Ppat_constant _ -> patouter
-        (* 1, 'a', "true", 1.0, 1l, 1L, 1n *)
-  | Ppat_interval (_,_) -> patouter
-        (* 'a'..'z'
 
-           Other forms of interval are recognized by the parser
-           but rejected by the type-checker. *)
-  | Ppat_tuple pats -> {patouter with ppat_desc=Ppat_tuple(List.map (traverse_pats f g) pats)}
+  | Ppat_constant _ (* 1, 'a', "true", 1.0, 1l, 1L, 1n *)
+  | Ppat_interval (_,_) (* 'a'..'z' *)
+  | Ppat_construct (_,None) (* constructor without payloads*)
+  | Ppat_variant (_, None) -> (* polymorphic variant constructor without payloads*)
+     patouter
+
+  | Ppat_tuple pats -> {patouter with ppat_desc=Ppat_tuple(List.map traverse pats)}
         (* (P1, ..., Pn)
 
            Invariant: n >= 2
         *)
-  | Ppat_construct (lidloc,Some(pat)) -> {patouter with ppat_desc=Ppat_construct(lidloc,Some(traverse_pats f g pat))}
-  | Ppat_construct (_,None) -> patouter
+  | Ppat_construct (lidloc,Some(pat)) -> {patouter with ppat_desc=Ppat_construct(lidloc,Some(traverse pat))}
         (* C                None
            C P              Some P
            C (P1, ..., Pn)  Some (Ppat_tuple [P1; ...; Pn])
          *)
-  | Ppat_variant (lab,Some(pat)) -> {patouter with ppat_desc=Ppat_variant(lab,Some(traverse_pats f g pat))}
-  | Ppat_variant (_, None) -> patouter
+  | Ppat_variant (lab,Some(pat)) -> {patouter with ppat_desc=Ppat_variant(lab,Some(traverse pat))}
         (* `A             (None)
            `A P           (Some P)
          *)
   | Ppat_record (recpats, Closed) ->
      {patouter with
-       ppat_desc=Ppat_record(List.map (fun (field,pat) -> (field,traverse_pats f g pat)) recpats, Closed)
+       ppat_desc=Ppat_record(List.map (fun (field,pat) -> (field,traverse pat)) recpats, Closed)
      }
         (* { l1=P1; ...; ln=Pn }     (flag = Closed)
            { l1=P1; ...; ln=Pn; _}   (flag = Open)
 
            Invariant: n > 0
          *)
-  | Ppat_array pats -> {patouter with ppat_desc=Ppat_array (List.map (traverse_pats f g) pats)}
+  | Ppat_array pats -> {patouter with ppat_desc=Ppat_array (List.map traverse pats)}
         (* [| P1; ...; Pn |] *)
-  | Ppat_constraint (pat,typ)  -> {patouter with ppat_desc=Ppat_constraint(traverse_pats f g pat,typ)}
+  | Ppat_constraint (pat,typ)  -> {patouter with ppat_desc=Ppat_constraint(traverse pat,typ)}
         (* (P : T) *)
-  | Ppat_type lidloc -> g lidloc
-        (* #tconst *)
-  | Ppat_lazy pat -> {patouter with ppat_desc=Ppat_lazy(traverse_pats f g pat)}
+  | Ppat_lazy pat -> {patouter with ppat_desc=Ppat_lazy(traverse pat)}
+
+  | Ppat_alias (_, tvarloc) ->
+     error tvarloc.loc "as-pattern is forbidden at %lin match" (* TODO relax this *)
+     (* {patouter with ppat_desc=Ppat_alias(traverse pat,tvarloc)} *)
+        (* P as 'a *)
 
   | Ppat_record (_, Open)
   | Ppat_or (_,_) | Ppat_unpack _
   | Ppat_exception _ | Ppat_extension _ | Ppat_open _ ->
        error patouter.ppat_loc "%lin cannot handle this pattern"
+  in
+  let p = traverse p in
+  p, List.rev !lin_vars
+
 
 let rec is_linpat {ppat_desc;ppat_loc; _} =
   match ppat_desc with
@@ -139,24 +154,14 @@ let rec is_linpat {ppat_desc;ppat_loc; _} =
 (* (#p, #q, x) ==> (__tmp1, __tmp2, x), [(#p, "__tmp1"), (#q, "__tmp2")] *)
 let lin_pattern oldpat : pattern * (Longident.t Location.loc * string) list=
   let wrap ({ppat_loc; _} as oldpat) =
-    let lin_vars = ref []
-    in
-    let replace_linpat ({loc; _} as linvar) =
-      let newvar = newname "match" in
-      lin_vars := (linvar,newvar) :: !lin_vars;
-      pconstr ~loc "Linocaml.Base.Lin_Internal__" [pvar ~loc newvar]
-
-    and wrap_datapat ({ppat_loc; _} as pat) =
-      pconstr ~loc:ppat_loc "Linocaml.Base.Data" [pat]
-    in
-    let newpat = traverse_pats wrap_datapat replace_linpat oldpat in
+    let newpat, lin_vars = convert_pattern oldpat in
     let newpat =
       if is_linpat oldpat then
         newpat (* not to duplicate Lin pattern *)
       else
         pconstr ~loc:ppat_loc "Linocaml.Base.Lin_Internal__" [newpat]
     in
-    newpat, List.rev !lin_vars
+    newpat, lin_vars
   in
   let newpat,lin_vars = wrap oldpat in
   newpat, lin_vars

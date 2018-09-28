@@ -51,21 +51,27 @@ end
 module type LENS = sig
   module LinMonad : LIN_MONAD
   open LinMonad
-  val (^^) : ('p, 'q, 'a) monad
+  type all_empty = [`cons of empty * 'xs] as 'xs
+  val (@>) : ('p, 'q, 'a) monad
              -> ('p, 'q, 'pre, 'post) lens
              -> ('pre, 'post, 'a) monad
   val id : ('a, 'b, 'a, 'b) lens
   val _0 : ('a, 'b, [`cons of 'a * 'xs], [`cons of 'b * 'xs]) lens
   val _1 : ('a, 'b, [`cons of 'x1 * [`cons of 'a * 'xs]], [`cons of 'x1 * [`cons of 'b * 'xs]]) lens
+  val _2 : ('a, 'b, [`cons of 'x1 * [`cons of 'x2 * [`cons of 'a * 'xs]]], [`cons of 'x1 * [`cons of 'x2 * [`cons of 'b * 'xs]]]) lens
   val succ : ('a, 'b, 'xs, 'ys) lens -> ('a, 'b, [`cons of 'x * 'xs], [`cons of 'x * 'ys]) lens
-  val run': (unit -> ([`cons of empty * 'xs] as 'xs, 'xs, 'a data) monad) -> 'a LinMonad.IO.io
+  val run': (unit -> (all_empty, all_empty, 'a data) monad) -> 'a LinMonad.IO.io
+
+  val extend : ('pre, [`cons of empty * 'pre], unit data) monad
+  val shrink : ([`cons of empty * 'pre], 'pre, unit data) monad
 end
 
 module LensMake(IO:IO)(M:LIN_MONAD with module IO = IO)
        : LENS with module LinMonad := M
   = struct
   open M
-  let (^^) : 'p 'q 'pre 'post 'a.
+  type all_empty = [`cons of empty * 'xs] as 'xs
+  let (@>) : 'p 'q 'pre 'post 'a.
              ('p, 'q, 'a) monad
              -> ('p, 'q, 'pre, 'post) lens
              -> ('pre, 'post, 'a) monad =
@@ -78,12 +84,22 @@ module LensMake(IO:IO)(M:LIN_MONAD with module IO = IO)
     {get=(fun(`cons(a,_)) -> a); put=(fun(`cons(_,xs)) b -> `cons(b,xs))}
   let _1 =
     {get=(fun(`cons(_,`cons(a,_))) -> a); put=(fun(`cons(x,`cons(_,xs))) b -> `cons(x,`cons(b,xs)))}
+  let _2 =
+    {get=(fun(`cons(_,(`cons(_,`cons(a,_))))) -> a); put=(fun(`cons(x,`cons(y,`cons(_,xs)))) b -> `cons(x,`cons(y,`cons(b,xs))))}
   let succ l =
     {get=(fun(`cons(_,xs)) -> l.get xs); put=(fun(`cons(x,xs)) b -> `cons(x,l.put xs b))}
-  let run': 'a. (unit -> ([`cons of empty  * 'xs] as 'xs, 'xs, 'a data) monad) -> 'a IO.io =
+  let run' =
     fun f ->
     let rec all_empty = `cons(Empty, all_empty) in
     IO.bind ((f ()).__m all_empty) (fun (_, Data x) -> IO.return x)
+  let extend : 'pre. ('pre, [`cons of empty * 'pre], unit data) monad =
+    {__m=(fun pre ->
+       IO.return (`cons(Empty, pre), Data ())
+    )}
+  let shrink : 'pre. ([`cons of empty * 'pre], 'pre, unit data) monad =
+    {__m=(fun (`cons(Empty,pre)) ->
+       IO.return (pre, Data ())
+    )}
 end
 
 module type LIN_MATCH = sig
@@ -94,9 +110,13 @@ module type LIN_MATCH = sig
               -> ('a lin -> ('mid, 'post, 'b) monad) bind
               -> ('pre, 'post, 'b) monad
   val return_lin : 'a -> ('p,'p,'a lin) monad
-  val (!^) : (empty, 'b lin, 'c data) monad
+  val (!%) : (empty, 'b lin, 'c data) monad
              -> ('pre, 'pre, ('b lin * 'c data) lin) monad
-  val (^^^) : ('a, 'b lin, 'c data) monad
+  val (!%!) : (empty, 'b lin, 'c data) monad
+             -> ('pre, 'pre, 'b lin) monad
+  val (%>!) : ('a, 'b lin, 'c data) monad
+              -> ('a, empty, 'pre, 'post) lens -> ('pre, 'post, 'b lin) monad
+  val (%>) : ('a, 'b lin, 'c data) monad
               -> ('a, empty, 'pre, 'post) lens -> ('pre, 'post, ('b lin * 'c data) lin) monad
   val put_lin : (empty,'a lin,'mid,'post) lens -> ('pre,'mid,'a lin) monad -> ('pre,'post,unit data) monad
   val put_linval : (empty,'a lin,'pre,'post) lens -> 'a -> ('pre,'post,unit data) monad
@@ -105,6 +125,7 @@ module type LIN_MATCH = sig
   module Syntax : sig
     val bind_data : ('pre,'mid,'a data) monad -> ('a -> ('mid,'post,'b) monad) -> ('pre,'post,'b) monad
     val bind_lin : ('pre,'mid,'a lin) monad -> ('a lin -> ('mid,'post,'b) monad) bind -> ('pre,'post,'b) monad
+    val bind_raw : ('pre,'mid,'a) monad -> ('a -> ('mid,'post,'b) monad) bind -> ('pre,'post,'b) monad
     val return_lin : 'a -> ('p,'p,'a lin) monad
     val get_lin : ('a lin, empty, 'pre, 'post) lens -> ('pre,'post,'a lin) monad
     val put_linval : (empty,'a lin,'pre,'post) lens -> 'a -> ('pre,'post,unit data) monad
@@ -112,10 +133,11 @@ module type LIN_MATCH = sig
 
     module Internal : sig
       val _mkbind : 'f -> 'f bind
-      val _put_lin : (empty, 'a lin, 'pre, 'post) lens -> 'a -> ('pre, 'post, unit data) monad
       val _run : ('pre,'post,'a data) monad -> 'pre -> 'a IO.io
-
       val _dispose_env : ('pre,'all_empty,'a) monad -> ('pre,empty,'a) monad
+      val _peek : ('pre -> ('pre, 'post, 'a) monad) -> ('pre, 'post, 'a) monad
+      val _poke : 'post -> ('pre, 'post, unit data) monad
+      val _map_lin : ('a -> 'b) -> ('a lin, 'b lin, 'pre, 'post) lens -> ('pre, 'post, unit data) monad
     end
   end
 end
@@ -137,18 +159,31 @@ module LinMatchMake(IO:IO)(M:LIN_MONAD with module IO = IO)
     {__m=(fun pre ->
        IO.return (pre, Lin_Internal__ v))}
 
-  let (!^) : 'a 'b 'c. (empty, 'b lin, 'c data) monad
+  let (!%) : 'a 'b 'c. (empty, 'b lin, 'c data) monad
              -> ('pre, 'pre, ('b lin * 'c data) lin) monad
     = fun m ->
     {__m=(fun pre ->
        IO.bind (m.__m Empty) (fun (b, c) -> IO.return (pre, Lin_Internal__ (b, c))))}
 
-  let (^^^) : 'a 'pre 'post 'b 'c. ('a, 'b lin, 'c data) monad
+  let (!%!) : 'a 'b 'c. (empty, 'b lin, 'c data) monad
+             -> ('pre, 'pre, 'b lin) monad
+    = fun m ->
+    {__m=(fun pre ->
+       IO.bind (m.__m Empty) (fun (b, _) -> IO.return (pre, b)))}
+
+  let (%>) : 'a 'pre 'post 'b 'c. ('a, 'b lin, 'c data) monad
               -> ('a, empty, 'pre, 'post) lens -> ('pre, 'post, ('b lin * 'c data) lin) monad
     = fun m l ->
     {__m=(fun pre ->
        IO.bind (m.__m (l.get pre)) (fun (b, c) ->
            IO.return (l.put pre Empty, Lin_Internal__ (b, c))))}
+
+  let (%>!) : 'a 'pre 'post 'b 'c. ('a, 'b lin, 'c data) monad
+              -> ('a, empty, 'pre, 'post) lens -> ('pre, 'post, 'b lin) monad
+    = fun m l ->
+    {__m=(fun pre ->
+       IO.bind (m.__m (l.get pre)) (fun (b, _) ->
+           IO.return (l.put pre Empty, b)))}
 
 
   let get_lin : 'a 'pre 'post. ('a lin, empty, 'pre, 'post) lens -> ('pre,'post,'a lin) monad =
@@ -170,29 +205,32 @@ module LinMatchMake(IO:IO)(M:LIN_MONAD with module IO = IO)
   module Syntax = struct
     let bind_data = (>>=)
     let bind_lin = (>>-)
+    let bind_raw {__m=m} f = {__m=(fun pre -> IO.bind (m pre) (fun (mid,x) -> (f x).__m mid))}
     let return_lin = return_lin
     let get_lin = get_lin
     let put_linval = put_linval
     let empty = Empty
 
     module Internal = struct
+      let _lin x = Lin_Internal__ x
+      let _unlin (Lin_Internal__ x) = x
       let _mkbind : 'f. 'f -> 'f bind =
         fun f -> f
-      let _put_lin : 'a 'pre 'post. (empty, 'a lin, 'pre, 'post) lens
-                     -> 'a -> ('pre, 'post, unit data) monad
-        = fun l v ->
-        {__m=fun pre ->
-             IO.return (l.put pre (Lin_Internal__ v), Data ())}
-      let _take_lin : 'a 'pre 'post. ('a lin,empty,'pre,'post) lens -> ('pre,'post,'a) monad =
-        fun l ->
-        {__m=(fun pre ->
-           IO.return (l.put pre Empty, match l.get pre with Lin_Internal__ v -> v))}
       let _run : 'pre 'post 'a. ('pre,'post,'a data) monad -> 'pre -> 'a IO.io =
         fun m pre ->
            IO.bind (m.__m pre) (fun (_, Data v) -> IO.return v)
       let _dispose_env m =
         {__m=(fun pre ->
            IO.bind (m.__m pre) (fun (_,a) -> IO.return (Empty, a)))}
+      let _peek : 'pre 'post 'a. ('pre -> ('pre, 'post, 'a) monad) -> ('pre, 'post, 'a) monad =
+        fun f ->
+        {__m=(fun pre -> ((f pre).__m pre))}
+      let _poke : 'pre 'post. 'post -> ('pre, 'post, unit data) monad =
+        fun post ->
+        {__m=(fun _ -> IO.return (post, Data ()))}
+      let _map_lin : 'a 'b 'pre 'post. ('a -> 'b) -> ('a lin, 'b lin, 'pre, 'post) lens -> ('pre, 'post, unit data) monad
+        = fun f l ->
+        {__m=fun pre -> IO.return (l.put pre @@ _lin (f (_unlin @@ l.get pre)), Data ())}
     end
   end
 end
