@@ -96,7 +96,7 @@ module LensMake(IO:IO)(M:LIN_MONAD with module IO = IO)
     {__m=(fun pre ->
        IO.return (`cons(Empty, pre), Data ())
     )}
-  let shrink : 'pre. ([`cons of empty * 'pre], 'pre, unit data) monad =
+  let shrink : type pre. ([`cons of empty * pre], pre, unit data) monad =
     {__m=(fun (`cons(Empty,pre)) ->
        IO.return (pre, Data ())
     )}
