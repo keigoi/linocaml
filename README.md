@@ -1,5 +1,10 @@
 # LinOCaml: Lightweight, monad-based linear types in OCaml, with a few syntax extensions
 
+## Paper
+
+- [Draft](https://keigoimai.info/linocaml-paper/draft.pdf)
+- [Draft in Japanese 日本語](https://keigoimai.info/linocaml-paper/jpn-draft.pdf)
+
 ## Build
 
     opam install dune
