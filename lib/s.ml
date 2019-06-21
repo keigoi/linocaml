@@ -28,6 +28,9 @@ module type LENS = sig
   val (@>) : ('p, 'q, 'a) monad
              -> ('p, 'q, 'pre, 'post) lens
              -> ('pre, 'post, 'a) monad
+  val (<@) : ('p, 'q, 'pre, 'post) lens
+            -> ('p, 'q, 'a) monad
+            -> ('pre, 'post, 'a) monad
   val _0 : ('a, 'b, [`cons of 'a * 'xs], [`cons of 'b * 'xs]) lens
   val _1 : ('a, 'b, [`cons of 'x1 * [`cons of 'a * 'xs]], [`cons of 'x1 * [`cons of 'b * 'xs]]) lens
   val _2 : ('a, 'b, [`cons of 'x1 * [`cons of 'x2 * [`cons of 'a * 'xs]]], [`cons of 'x1 * [`cons of 'x2 * [`cons of 'b * 'xs]]]) lens

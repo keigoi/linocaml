@@ -1,4 +1,5 @@
 module Base = Base
+module S = S
 include Base
 
 module LinMonadMake(IO:S.IO)
@@ -31,6 +32,7 @@ module LensMake(IO:S.IO)(M:S.LIN_MONAD with module IO = IO)
     fun m l ->
     {__m=(fun pre ->
        IO.bind (m.__m (lens_get l pre)) (fun (q, a) -> IO.return (lens_put l pre q, a)))}
+  let (<@) l m = m @> l
   let _0 = Zero
   let _1 = Succ Zero
   let _2 = Succ (Succ Zero)
