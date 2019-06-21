@@ -1,0 +1,5 @@
+(executable
+ (name test_ppx)
+ (preprocess
+  (pps linocaml.ppx linocaml.ppx_lens))
+ (libraries linocaml))

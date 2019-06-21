@@ -3,7 +3,7 @@
   (public_name ex_array)
   (modules ex_array)
   (flags ("-short-paths" "-w" "-32")) ; Unused value declaration.
-  (preprocess (pps linocaml.ppx linocaml.ppx_lens))
+  (preprocess (pps linocaml.ppx))
   (libraries linocaml))
 
 (executable
@@ -11,7 +11,7 @@
   (public_name ex_linlist)
   (modules ex_linlist)
   (flags ("-short-paths" "-w" "-32")) ; Unused value declaration.
-  (preprocess (pps linocaml.ppx linocaml.ppx_lens))
+  (preprocess (pps linocaml.ppx))
   (libraries linocaml))
 
 (executable
@@ -19,5 +19,5 @@
   (public_name ex_session)
   (modules ex_session)
   (flags ("-short-paths" "-w" "-32")) ; Unused value declaration.
-  (preprocess (pps linocaml.ppx linocaml.ppx_lens))
+  (preprocess (pps linocaml.ppx))
   (libraries linocaml threads))

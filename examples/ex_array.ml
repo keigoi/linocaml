@@ -1,7 +1,6 @@
 (* Example: linearly-typed arrays *)
-open Linocaml.Base
-open Linocaml.Direct
-open LinArray
+open Linocaml
+open Linocaml.LinArray
 
 
 let example () =
@@ -27,7 +26,7 @@ let example2 () =
   return xs
 
 let () =
-  List.iter (fun x -> print_endline (string_of_int x)) (run' example2)
+  List.iter (fun x -> print_endline (string_of_int x)) (run' example2 ())
 
 let example3 () =
   alloc [100; 200; 300] @> _0 >>
@@ -41,7 +40,7 @@ let example3 () =
   return xs
 
 let () =
-  List.iter print_endline (run' example3)
+  List.iter print_endline (run' example3 ())
 
 open LinArray1
 
@@ -56,7 +55,7 @@ let example4 () =
   return ())
 
 let () =
-  run' example4
+  run' example4 ()
 
 let example5 () =
   let s = _0 and t = _1 in
@@ -85,7 +84,7 @@ let example5' () =
   return xs
 
 let () =
-  List.iter print_endline (run' example5')
+  List.iter print_endline (run' example5' ())
 
 let example6 () =
   extend >>

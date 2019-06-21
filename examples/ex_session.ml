@@ -1,5 +1,4 @@
-open Linocaml.Base
-open Linocaml.Direct
+open Linocaml
 
 module Channel : sig
   type 'a t
@@ -25,15 +24,15 @@ module Session : sig
   val connect : ('s * 'c) Channel.t -> ('s * 'c) prot -> ('pre, 'pre, 'c lin) monad
   val accept : ('s * 'c) Channel.t -> ('pre, 'pre, 's lin) monad
 
-  val send : (('v, 's) send lin, empty, 'pre, 'post) lens ->
+  val send : (('v, 's) send lin, unit, 'pre, 'post) lens ->
              'v ->
              ('pre, 'post, 's lin) monad
-  val receive : (('v, 's) recv lin, empty, 'pre, 'post) lens ->
+  val receive : (('v, 's) recv lin, unit, 'pre, 'post) lens ->
                 ('pre, 'post, ('s lin * 'v data) lin) monad
-  val close : (close lin, empty, 'pre, 'post) lens ->
+  val close : (close lin, unit, 'pre, 'post) lens ->
               ('pre, 'post, unit data) monad
 end = struct
-  let unlin (Lin_Internal__ x) = x
+  let unlin x = x.__lin
   type ('v, 's) send = 'v Channel.t * 's lin
   type ('v, 's) recv = 'v Channel.t * 's lin
   type close = unit
@@ -41,7 +40,7 @@ end = struct
   let s2c : ('s * 'c) prot -> (('v, 's) send * ('v, 'c) recv) prot =
     fun (s,c) ->
     let newchan = Channel.create () in
-    ((newchan,Lin_Internal__ s),(newchan,Lin_Internal__ c))
+    ((newchan,{__lin=s}),(newchan,{__lin=c}))
   let c2s = s2c
   let finish : (close * close) prot = (), ()
 
@@ -49,38 +48,38 @@ end = struct
     fun ch (s,c) ->
     {__m=(fun pre ->
        Channel.send ch (s,c);
-       (pre, Lin_Internal__ c)
+       (pre, {__lin=c})
     )}
   let accept : ('s * 'c) Channel.t -> ('pre, 'pre, 's lin) monad =
     fun ch ->
     {__m=(fun pre ->
        let s,_ = Channel.receive ch in
-       (pre, Lin_Internal__ s)
+       (pre, {__lin=s})
     )}
 
 
-  let send : (('v, 's) send lin, empty, 'pre, 'post) lens ->
+  let send : (('v, 's) send lin, unit, 'pre, 'post) lens ->
              'v ->
              ('pre, 'post, 's lin) monad =
     fun l v ->
     {__m=(fun pre ->
-       let ch, cont = unlin @@ l.get pre in
+       let ch, cont = unlin @@ lens_get l pre in
        Channel.send ch v;
-       (l.put pre Empty, cont)
+       (lens_put l pre (), cont)
     )}
-  let receive : (('v, 's) recv lin, empty, 'pre, 'post) lens ->
+  let receive : (('v, 's) recv lin, unit, 'pre, 'post) lens ->
                 ('pre, 'post, ('s lin * 'v data) lin) monad =
     fun l ->
     {__m=(fun pre ->
-       let ch, cont = unlin @@ l.get pre in
+       let ch, cont = unlin @@ lens_get l pre in
        let v = Channel.receive ch in
-       (l.put pre Empty, Lin_Internal__ (cont, Data v))
+       (lens_put l pre (), {__lin=(cont, {data=v})})
     )}
-  let close : (close lin, empty, 'pre, 'post) lens ->
+  let close : (close lin, unit, 'pre, 'post) lens ->
               ('pre, 'post, unit data) monad =
     fun l ->
     {__m=(fun pre ->
-       (l.put pre Empty, Data ())
+       (lens_put l pre (), {data=()})
     )}
 end
 
@@ -99,7 +98,14 @@ let santa ch () =
   let s = _0 in
   let e = _1 in
   let r = _2 in
-  let rec iter i l1 l2 l3 f =
+  let rec iter :
+            type a pre mid0 mid.
+                 int ->
+                 (a sesslist_ lin, unit, pre, [ `cons of unit * mid0 ]) lens ->
+                 (unit, a sesslist_ lin, [ `cons of a lin * mid0 ], mid) lens ->
+                 (unit, a sesslist_ lin, [ `cons of unit * mid0 ], pre) lens ->
+                 (unit -> (mid, pre, unit data) monad) -> (pre, pre, unit data) monad =
+    fun i l1 l2 l3 f ->
     if i=0 then
       return ()
     else
@@ -180,4 +186,4 @@ let () =
       Thread.create (fun () ->
           run' (reindeer i ch)) ();
   done;
-  run' (santa ch)
+  run' (santa ch) ()

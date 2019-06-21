@@ -19,9 +19,6 @@ let root_module = ref "Syntax"
 
 let longident ?loc str = evar ?loc str
 
-let emptyslot () =
-  longident (!root_module ^ ".empty")
-
 let monad_bind_data () =
   longident (!root_module ^ ".bind_data")
 
@@ -75,9 +72,9 @@ let convert_pattern (p : pattern) : pattern * (Longident.t Location.loc * string
   let replace_linpat ({loc; _} as linvar) =
     let newvar = newname "match" in
     lin_vars := (linvar,newvar) :: !lin_vars;
-    pconstr ~loc "Linocaml.Base.Lin_Internal__" [pvar ~loc newvar]
-  and wrap_datapat ({ppat_loc; _} as pat) =
-    pconstr ~loc:ppat_loc "Linocaml.Base.Data" [pat]
+    precord ~loc [("Linocaml.__lin", pvar ~loc newvar)]
+  and wrap_datapat ({ppat_loc=loc; _} as pat) =
+    precord ~loc [("Linocaml.data", pat)]
   in
   let rec traverse ({ppat_desc; _} as patouter) =
   match ppat_desc with
@@ -159,7 +156,7 @@ let lin_pattern oldpat : pattern * (Longident.t Location.loc * string) list=
       if is_linpat oldpat then
         newpat (* not to duplicate Lin pattern *)
       else
-        pconstr ~loc:ppat_loc "Linocaml.Base.Lin_Internal__" [newpat]
+        precord ~loc:ppat_loc [("Linocaml.__lin", newpat)]
     in
     newpat, lin_vars
   in
@@ -186,7 +183,7 @@ let rec linval ({pexp_desc;pexp_loc;pexp_attributes} as outer) =
     {pexp_desc=Pexp_tuple(exprs);pexp_loc;pexp_attributes}, List.concat bindings
 
   | Pexp_construct ({txt=Lident "Data"; _},Some(expr)) ->
-     constr ~loc:pexp_loc ~attrs:pexp_attributes "Linocaml.Base.Data" [expr], []
+     record ~loc:pexp_loc ~attrs:pexp_attributes [("Linocaml.data",expr)], []
 
   | Pexp_construct (lid,Some(expr)) ->
      let expr, binding = linval expr in
@@ -341,16 +338,16 @@ let runner ({ ptype_loc = loc; _ } as type_decl) =
         {pcf_desc =
            Pcf_method (fname,
                        Public,
-                       Cfk_concrete(Fresh, emptyslot ()));
+                       Cfk_concrete(Fresh, unit ~loc ()));
          pcf_loc = Location.none;
          pcf_attributes = []}
       in
-      constr "Linocaml.Base.Lin_Internal__" [Exp.object_ {pcstr_self = Pat.any (); pcstr_fields = List.map meth labels}]
+      record [("Linocaml.__lin", Exp.object_ {pcstr_self = Pat.any (); pcstr_fields = List.map meth labels})]
     in
     let objtyp =
-      let methtyp (fname,_,_) = (fname,[],tconstr "Linocaml.Base.empty" [])
+      let methtyp (fname,_,_) = (fname,[],tconstr "unit" [])
       in
-      tconstr "Linocaml.Base.lin" [Typ.object_ (List.map methtyp labels) Closed]
+      tconstr "Linocaml.lin" [Typ.object_ (List.map methtyp labels) Closed]
     in
     let mkfun = Exp.fun_ Label.nolabel None in
     let runner = mkfun (pvar "x") (mkfun (pvar "y") (app (runmonad ()) [app (evar "x") [evar "y"]; obj]))

@@ -6,10 +6,10 @@ bug-reports: "https://github.com/keigoi/linocaml/issues"
 dev-repo: "https://github.com/keigoi/linocaml.git"
 license: "Apache"
 build:
-[[ "jbuilder" "build" "--only-packages" "%{name}%" "--root" "." "-j" jobs "@install" ]]
+[[ "dune" "build" "-p" name "-j" jobs ]]
 available: [ ocaml-version >= "4.05" ]
 depends: [
-  "jbuilder" {build}
+  "dune" {build & >= "1.0"}
   "ocaml-migrate-parsetree"
   "ppx_tools_versioned"
 ]
