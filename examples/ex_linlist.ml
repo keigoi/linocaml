@@ -18,7 +18,7 @@ let rec map f =
   match%lin get_lin s with
   | Cons(x, #s) ->
     map f >>
-    put_lin s [%linret Cons(Data (f x), !!s)]
+    put_lin s [%linret Cons({data=(f x)}, !!s)]
   | Nil -> put_linval s Nil
 
 (* equivalent to List.rev_map *)
@@ -26,7 +26,7 @@ let rev_map f =
   let rec loop () =
     match%lin get_lin s with
     | Cons(x, #s) ->
-       put_lin t [%linret Cons(Data (f x), !!t)] >>
+       put_lin t [%linret Cons({data=(f x)}, !!t)] >>
        loop ()
     | Nil -> return ()
   in
@@ -38,7 +38,7 @@ let rev_map f =
 let rec make = function
   | x::xs ->
      make xs >>
-     put_lin s [%linret Cons(Data x, !!s)]
+     put_lin s [%linret Cons({data=x}, !!s)]
   | [] ->
      put_linval s Nil
 
@@ -65,7 +65,7 @@ let rec map f s1 s2 =
   match%lin get_lin s1 with
   | Cons(x, #s2) ->
      map f s1 s2 >>
-     put_lin s2 [%linret Cons(Data (f x), !! s1)]
+     put_lin s2 [%linret Cons({data=f x}, !! s1)]
   | Nil -> put_linval s2 Nil
 
 (* more liberal one *)
@@ -73,7 +73,7 @@ let rec map f s1 s2 s3 s4 =
   match%lin get_lin s1 with
   | Cons(x, #s2) ->
      map f s1 s2 s3 s4 >>
-     put_lin s4 [%linret Cons(Data (f x), !! s3)]
+     put_lin s4 [%linret Cons({data=f x}, !! s3)]
   | Nil -> put_linval s4 Nil
 
 

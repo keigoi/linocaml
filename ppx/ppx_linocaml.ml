@@ -105,6 +105,10 @@ let convert_pattern (p : pattern) : pattern * (Longident.t Location.loc * string
         (* `A             (None)
            `A P           (Some P)
          *)
+  | Ppat_record ([({txt=Lident"data";_}, _)], Closed) as p ->
+     {patouter with
+       ppat_desc=p
+     }
   | Ppat_record (recpats, Closed) ->
      {patouter with
        ppat_desc=Ppat_record(List.map (fun (field,pat) -> (field,traverse pat)) recpats, Closed)
@@ -182,7 +186,7 @@ let rec linval ({pexp_desc;pexp_loc;pexp_attributes} as outer) =
     let exprs, bindings = List.split (List.map linval exprs) in
     {pexp_desc=Pexp_tuple(exprs);pexp_loc;pexp_attributes}, List.concat bindings
 
-  | Pexp_construct ({txt=Lident "Data"; _},Some(expr)) ->
+  | Pexp_record ([({txt=Lident"data";_}, expr)],None) ->
      record ~loc:pexp_loc ~attrs:pexp_attributes [("Linocaml.data",expr)], []
 
   | Pexp_construct (lid,Some(expr)) ->
