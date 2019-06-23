@@ -369,19 +369,13 @@ let has_runner attrs =
 
 let mapper_fun _ _ =
   let open Ast_mapper in
-  let rec expr mapper outer =
+  let expr mapper outer =
   match outer with
   | {pexp_desc=Pexp_extension ({ txt = id; _ }, PStr([{pstr_desc=Pstr_eval(inner,inner_attrs); _}])); pexp_attributes=outer_attrs; _} ->
      begin match expression_mapper id mapper inner (inner_attrs @ outer_attrs) with
      | Some exp -> exp
      | None -> default_mapper.expr mapper outer
      end
-  (* Lens.compose to gain full polymorphism *)
-  | {pexp_desc=Pexp_apply({pexp_desc=Pexp_ident({txt=Lident "##."; _}); _},[(_,e1);(_,e2)]); _} ->
-     let e1 = expr mapper e1
-     and e2 = expr mapper e2 in
-     (* brain-dead specialization of Lens.compose. problematic in various aspects: name capture, duplicated code, ... *)
-     [%expr {get=(fun out1__ -> [%e e1].get ([%e e2].get out1__)); put=(fun out1__ b__ -> [%e e2].put out1__ ([%e e1].put ([%e e2].get out1__) b__))}]
   | _ -> default_mapper.expr mapper outer
   and stritem mapper outer =
     match outer with
