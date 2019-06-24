@@ -1,12 +1,32 @@
 (* TODO: replace "failwith" with proper error-handling *)
 open Migrate_parsetree
-open Ast_405
+open Ast_408
 
 open Asttypes
 open Longident
 open Parsetree
 open Ast_helper
-open Ast_convenience_405
+
+let may_tuple ?loc tup = function
+  | [] -> None
+  | [x] -> Some x
+  | l -> Some (tup ?loc ?attrs:None l)
+
+(* FIXME *)
+let lid ?(loc = !default_loc) s = Location.mkloc (Longident.parse s) loc
+let app ?loc ?attrs f l = if l = [] then f else Exp.apply ?loc ?attrs f (List.map (fun a -> Nolabel, a) l)
+let evar ?loc ?attrs s = Exp.ident ?loc ?attrs (lid ?loc s)
+let lam ?loc ?attrs ?(label = Nolabel) ?default pat exp = Exp.fun_ ?loc ?attrs label default pat exp
+let record ?loc ?attrs ?over l =
+  Exp.record ?loc ?attrs (List.map (fun (s, e) -> (lid ~loc:e.pexp_loc s, e)) l) over
+let constr ?loc ?attrs s args = Exp.construct ?loc ?attrs (lid ?loc s) (may_tuple ?loc Exp.tuple args)
+let unit ?loc ?attrs () = constr ?loc ?attrs "()" []
+let pvar ?(loc = !default_loc) ?attrs s = Pat.var ~loc ?attrs (Location.mkloc s loc)
+let pconstr ?loc ?attrs s args = Pat.construct ?loc ?attrs (lid ?loc s) (may_tuple ?loc Pat.tuple args)
+let punit ?loc ?attrs () = pconstr ?loc ?attrs "()" []
+let precord ?loc ?attrs ?(closed = Open) l =
+  Pat.record ?loc ?attrs (List.map (fun (s, e) -> (lid ~loc:e.ppat_loc s, e)) l) closed
+let tconstr ?loc ?attrs c l = Typ.constr ?loc ?attrs (lid ?loc c) l
 
 let newname =
   let r = ref 0 in
@@ -171,7 +191,7 @@ let make_lin_match_case ({pc_lhs=pat;pc_rhs=expr; _} as case) =
   let newpat, linvars = lin_pattern pat in
   {case with pc_lhs=newpat; pc_rhs=add_putval linvars expr}
 
-let rec linval ({pexp_desc;pexp_loc;pexp_attributes} as outer) =
+let rec linval ({pexp_desc;pexp_loc;_(*pexp_loc_stack*)} as outer) =
   match pexp_desc with
   | Pexp_ident _ | Pexp_constant _
   | Pexp_construct (_,None)
@@ -184,17 +204,17 @@ let rec linval ({pexp_desc;pexp_loc;pexp_attributes} as outer) =
 
   | Pexp_tuple (exprs) ->
     let exprs, bindings = List.split (List.map linval exprs) in
-    {pexp_desc=Pexp_tuple(exprs);pexp_loc;pexp_attributes}, List.concat bindings
+    {outer with pexp_desc=Pexp_tuple(exprs);pexp_loc}, List.concat bindings
 
-  | Pexp_record ([({txt=Lident"data";_}, expr)],None) ->
-     record ~loc:pexp_loc ~attrs:pexp_attributes [("Linocaml.data",expr)], []
+  | Pexp_record ([({txt=Lident"data";_}, _)],None) ->
+     outer, []
 
   | Pexp_construct (lid,Some(expr)) ->
      let expr, binding = linval expr in
-     {pexp_desc=Pexp_construct(lid,Some(expr));pexp_loc;pexp_attributes}, binding
+     {outer with pexp_desc=Pexp_construct(lid,Some(expr))}, binding
   | Pexp_variant (lab,Some(expr)) ->
      let expr, binding = linval expr in
-     {pexp_desc=Pexp_variant(lab,Some(expr));pexp_loc;pexp_attributes}, binding
+     {outer with pexp_desc=Pexp_variant(lab,Some(expr))}, binding
   | Pexp_record (fields,expropt) ->
      let fields, bindings =
        List.split (List.map (fun (lid,expr) -> let e,b = linval expr in (lid,e),b) fields)
@@ -207,28 +227,28 @@ let rec linval ({pexp_desc;pexp_loc;pexp_attributes} as outer) =
           Some expr, binding @ bindings
        | None -> None, bindings
      in
-     {pexp_desc=Pexp_record(fields,expropt);pexp_loc;pexp_attributes}, bindings
+     {outer with pexp_desc=Pexp_record(fields,expropt)}, bindings
   | Pexp_array (exprs) ->
      let exprs, bindings =
        List.split (List.map linval exprs)
      in
-     {pexp_desc=Pexp_array(exprs);pexp_loc;pexp_attributes}, List.concat bindings
+     {outer with pexp_desc=Pexp_array(exprs)}, List.concat bindings
   | Pexp_constraint (expr,typ) ->
      let expr, binding = linval expr
      in
-     {pexp_desc=Pexp_constraint(expr,typ);pexp_loc;pexp_attributes}, binding
+     {outer with pexp_desc=Pexp_constraint(expr,typ);}, binding
   | Pexp_coerce (expr,typopt,typ) ->
      let expr, binding = linval expr
      in
-     {pexp_desc=Pexp_coerce(expr,typopt,typ);pexp_loc;pexp_attributes}, binding
+     {outer with pexp_desc=Pexp_coerce(expr,typopt,typ);}, binding
   | Pexp_lazy expr ->
      let expr, binding = linval expr
      in
-     {pexp_desc=Pexp_lazy(expr);pexp_loc;pexp_attributes}, binding
-  | Pexp_open (oflag,lid,expr) ->
+     {outer with pexp_desc=Pexp_lazy(expr);}, binding
+  | Pexp_open (odecl,expr) ->
      let expr, binding = linval expr
      in
-     {pexp_desc=Pexp_open(oflag,lid,expr);pexp_loc;pexp_attributes}, binding
+     {outer with pexp_desc=Pexp_open(odecl,expr);}, binding
   | Pexp_apply (expr,exprs) ->
      let expr, binding = linval expr in
      let exprs, bindings =
@@ -238,7 +258,7 @@ let rec linval ({pexp_desc;pexp_loc;pexp_attributes} as outer) =
            exprs
      in
      begin match binding @ List.concat bindings with
-     | [] -> {pexp_desc=Pexp_apply(expr,exprs);pexp_loc;pexp_attributes}, []
+     | [] -> {outer with pexp_desc=Pexp_apply(expr,exprs)}, []
      | _ ->
         error pexp_loc "function call inside %linval cannot contain slot references (!! slotname)"
      end
@@ -253,13 +273,13 @@ let rec linval ({pexp_desc;pexp_loc;pexp_attributes} as outer) =
              error pexp_loc "object can only contain public method")
          fields
      in
-     {pexp_desc=Pexp_object({o with pcstr_fields=new_fields});pexp_loc;pexp_attributes},
+     {outer with pexp_desc=Pexp_object({o with pcstr_fields=new_fields});},
      List.concat bindings
   | Pexp_object _ ->
      failwith "object in linval can't refer to itself"
   | Pexp_poly (expr,None) ->
      let expr, binding = linval expr in
-     {pexp_desc=Pexp_poly(expr,None);pexp_loc;pexp_attributes}, binding
+     {outer with pexp_desc=Pexp_poly(expr,None);}, binding
   | Pexp_poly (_,_) ->
      failwith "object method can not have type ascription"
   | Pexp_let (_,_,_) | Pexp_function _
@@ -270,15 +290,16 @@ let rec linval ({pexp_desc;pexp_loc;pexp_attributes} as outer) =
   | Pexp_letmodule (_,_,_) | Pexp_assert _ | Pexp_newtype (_,_)
   | Pexp_pack _ | Pexp_extension _
   | Pexp_unreachable | Pexp_letexception _
+  | Pexp_letop _
     -> failwith "%linval can only contain values"
 
 let expression_mapper id mapper exp attrs =
   let pexp_attributes = exp.pexp_attributes @ attrs in
-  let pexp_loc=exp.pexp_loc in
+  let pexp_loc = exp.pexp_loc in
+  let pexp_loc_stack = exp.pexp_loc_stack in
   let process_inner expr = mapper.Ast_mapper.expr mapper expr
   in
   match id, exp.pexp_desc with
-
   | "lin", Pexp_let (Nonrecursive, vbls, expr) ->
      let lin_binding ({pvb_pat; _} as vb) =
          let newpat, linvars = lin_pattern pvb_pat in
@@ -309,7 +330,7 @@ let expression_mapper id mapper exp attrs =
      let new_expr =
        app ~loc:pexp_loc ~attrs:pexp_attributes
          (mkbind ())
-         [{pexp_desc=Pexp_function(cases); pexp_loc; pexp_attributes}]
+         [{pexp_desc=Pexp_function(cases); pexp_loc; pexp_attributes; pexp_loc_stack}]
      in
      Some (process_inner new_expr)
 
@@ -319,7 +340,7 @@ let expression_mapper id mapper exp attrs =
      let new_expr =
        app ~loc:pexp_loc ~attrs:pexp_attributes
          (mkbind ())
-         [{pexp_desc=Pexp_fun(Nolabel,None,newpat,newexpr); pexp_loc; pexp_attributes}]
+         [{pexp_desc=Pexp_fun(Nolabel,None,newpat,newexpr); pexp_loc; pexp_attributes; pexp_loc_stack}]
      in
      Some (process_inner new_expr)
 
@@ -327,42 +348,12 @@ let expression_mapper id mapper exp attrs =
      error pexp_loc "Invalid content for extension %lin; it must be \"let%lin slotname = ..\" OR \"match%lin slotname with ..\""
 
   | "linret", expr ->
-     let new_exp, bindings = linval {pexp_desc=expr;pexp_loc;pexp_attributes} in
+     let new_exp, bindings = linval {pexp_desc=expr;pexp_loc;pexp_attributes;pexp_loc_stack} in
      let new_exp = app (monad_return_lin ()) [new_exp] in
      let new_exp = add_takeval bindings new_exp in
      Some(new_exp)
 
   | _ -> None
-
-let runner ({ ptype_loc = loc; _ } as type_decl) =
-  match type_decl with
-  | {ptype_name = {txt = name; _}; ptype_manifest = Some ({ptyp_desc = Ptyp_object (labels, Closed); _}); _} ->
-    let obj =
-      let meth (fname,_,_) =
-        {pcf_desc =
-           Pcf_method (fname,
-                       Public,
-                       Cfk_concrete(Fresh, unit ~loc ()));
-         pcf_loc = Location.none;
-         pcf_attributes = []}
-      in
-      record [("Linocaml.__lin", Exp.object_ {pcstr_self = Pat.any (); pcstr_fields = List.map meth labels})]
-    in
-    let objtyp =
-      let methtyp (fname,_,_) = (fname,[],tconstr "unit" [])
-      in
-      tconstr "Linocaml.lin" [Typ.object_ (List.map methtyp labels) Closed]
-    in
-    let mkfun = Exp.fun_ Label.nolabel None in
-    let runner = mkfun (pvar "x") (mkfun (pvar "y") (app (runmonad ()) [app (evar "x") [evar "y"]; obj]))
-    and linval = disposeenv () in
-    let runnertyp = Typ.arrow Nolabel (Typ.arrow Nolabel (Typ.any ()) (tconstr "monad" [objtyp; objtyp; Typ.any ()])) (Typ.any ())
-    and linvaltyp = Typ.arrow Nolabel (tconstr "monad" [Typ.any (); objtyp; Typ.any ()]) (Typ.any ()) in
-    let runner = {pstr_desc = Pstr_value (Nonrecursive, [Vb.mk (Pat.constraint_ (pvar ("run_" ^ name)) runnertyp) runner]); pstr_loc = Location.none}
-    and linval = {pstr_desc = Pstr_value (Nonrecursive, [Vb.mk (Pat.constraint_ (pvar ("linval_"^name)) linvaltyp) linval]); pstr_loc = Location.none}
-    in
-    [runner; linval]
-  | _ -> error loc "run_* can be derived only for record or closed object types"
 
 let has_runner attrs =
   List.exists (fun ({txt = name; _},_) -> name = "runner")  attrs
@@ -377,21 +368,8 @@ let mapper_fun _ _ =
      | None -> default_mapper.expr mapper outer
      end
   | _ -> default_mapper.expr mapper outer
-  and stritem mapper outer =
-    match outer with
-    | {pstr_desc = Pstr_type (_,type_decls); _} ->
-       let runners =
-         List.map (fun type_decl ->
-           if has_runner type_decl.ptype_attributes then
-             [runner type_decl]
-           else []) type_decls
-       in [outer] @ List.flatten (List.flatten runners)
-    | _ -> [default_mapper.structure_item mapper outer]
   in
-  let structure mapper str =
-    List.flatten (List.map (stritem mapper) str)
-  in
-  {default_mapper with expr; structure}
+  {default_mapper with expr}
 
 let migration =
   Versions.migrate Versions.ocaml_405 Versions.ocaml_current
@@ -399,5 +377,5 @@ let migration =
 let () =
   Driver.register
     ~name:"ppx_linocaml"
-    Versions.ocaml_405
+    Versions.ocaml_408
     mapper_fun
