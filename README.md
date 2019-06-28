@@ -2,7 +2,7 @@
 
 ## Paper
 
-- [Draft](https://keigoimai.info/linocaml-paper/draft.pdf)
+- [Draft](https://www.math.nagoya-u.ac.jp/~garrigue/papers/linocaml-201902.pdf)
 - [Draft in Japanese 日本語](https://keigoimai.info/linocaml-paper/jpn-draft.pdf)
 
 ## Build
