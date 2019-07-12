@@ -70,8 +70,6 @@ module type LIN_MATCH = sig
 
     module Internal : sig
       val _mkbind : 'f -> 'f bind
-      val _run : ('pre,'post,'a data) monad -> 'pre -> 'a IO.io
-      val _dispose_env : ('pre,'all_empty,'a) monad -> ('pre,unit,'a) monad
       val _peek : ('pre -> ('pre, 'post, 'a) monad) -> ('pre, 'post, 'a) monad
       val _poke : 'post -> ('pre, 'post, unit data) monad
       val _map_lin : ('a -> 'b) -> ('a lin, 'b lin, 'pre, 'post) lens -> ('pre, 'post, unit data) monad

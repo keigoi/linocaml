@@ -1,4 +1,12 @@
 (executable
+  (name benchmark)
+  (modules benchmark)
+  (flags ("-short-paths" "-w" "-32")) ; Unused value declaration.
+  (ocamlopt_flags -O3)
+  (preprocess (pps linocaml.ppx))
+  (libraries linocaml linocaml_lwt core_bench))
+
+(executable
   (name ex_array)
   (public_name ex_array)
   (modules ex_array)
