@@ -1,4 +1,6 @@
 (library
  (name linocaml_async)
  (public_name linocaml.async)
- (libraries linocaml async async_unix))
+ (virtual_deps "async")
+ (optional)
+(libraries linocaml async async_unix))
