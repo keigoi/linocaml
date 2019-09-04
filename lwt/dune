@@ -1,4 +1,7 @@
 (library
  (name linocaml_lwt)
  (public_name linocaml.lwt)
- (libraries lwt lwt.unix linocaml))
+ (libraries lwt lwt.unix linocaml)
+ (virtual_deps "async")
+ (optional)
+)
