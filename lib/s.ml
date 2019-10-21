@@ -16,6 +16,7 @@ module type LIN_MONAD = sig
   val (>>) : ('pre, 'mid, 'a data) monad
              -> ('mid, 'post, 'b) monad
              -> ('pre, 'post, 'b) monad
+  val lift : ('a -> 'b IO.io) -> 'a -> ('pre,'pre,'b data) monad
   val run :
     (unit -> (unit, unit, 'a data) monad)
     -> 'a IO.io

@@ -16,6 +16,8 @@ module LinMonadMake(IO:S.IO)
   let[@inline] (>>) m1 m2 =
     {__m=(fun[@inline] pre ->
        IO.bind (m1.__m pre) (fun[@inline] (mid, _) -> m2.__m mid))}
+  let[@inline] lift f x =
+    {__m=(fun[@inline] pre -> IO.bind (f x) (fun y -> IO.return (pre, {data=y})))}
   let[@inline] run f =
     IO.bind ((f ()).__m ()) (fun[@inline] (_, {data=x}) -> IO.return x)
 end[@@inline]
